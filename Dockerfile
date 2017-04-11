@@ -8,8 +8,10 @@ WORKDIR /go/src/github.com/akatrevorjay/dnsdock
 COPY glide.* ./
 RUN glide i
 
-COPY main.go ./
-COPY core utils servers ./
+COPY utils utils
+COPY servers servers
+COPY core core
+COPY *.go ./
 
 RUN go install .
 

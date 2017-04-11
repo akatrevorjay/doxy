@@ -1,10 +1,13 @@
 dnsdock:
   build: .
   hostname: dnsdock
+  container_name: dnsdock
+  command: dnsdock --dns=":53" --http=":80" --alias -v
+  #command: dnsdock --dns=":54" --http=":80" --alias -v
   volumes:
     - /var/run/docker.sock:/run/docker.sock
-  #command: -nameserver 192.168.0.1:53 -nameserver 8.8.8.8:53
-  #network_mode: host
-  #ports:
-  #  - 172.17.0.0:53:53/udp
-  ##restart: always
+  #net: host
+  ports:
+    - 172.17.0.0:53:53/udp
+    - 172.17.0.0:53:53/tcp
+  restart: always
