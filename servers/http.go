@@ -30,13 +30,14 @@ func NewHTTPServer(c *utils.Config, list ServiceListProvider) *HTTPServer {
 	}
 
 	router := mux.NewRouter()
+
 	router.HandleFunc("/services", s.getServices).Methods("GET")
 	router.HandleFunc("/services/{id}", s.getService).Methods("GET")
 	router.HandleFunc("/services/{id}", s.addService).Methods("PUT")
 	router.HandleFunc("/services/{id}", s.updateService).Methods("PATCH")
 	router.HandleFunc("/services/{id}", s.removeService).Methods("DELETE")
 
-	router.HandleFunc("/set/ttl", s.setTTL).Methods("PUT")
+	router.HandleFunc("/settings/ttl", s.setTTL).Methods("PUT")
 
 	s.server = &http.Server{Addr: c.HttpAddr, Handler: router}
 
