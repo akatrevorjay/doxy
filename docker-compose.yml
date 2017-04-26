@@ -1,13 +1,36 @@
-dnsdock:
-  build: .
-  hostname: dnsdock
-  container_name: dnsdock
-  command: dnsdock --dns=":53" --http=":80" --alias -v
-  #command: dnsdock --dns=":54" --http=":80" --alias -v
-  volumes:
-    - /var/run/docker.sock:/run/docker.sock
-  #net: host
-  ports:
-    - 172.17.0.0:53:53/udp
-    - 172.17.0.0:53:53/tcp
-  restart: always
+version: '3'
+
+services:
+  dnsdock:
+    build: .
+    hostname: dnsdock
+    container_name: dnsdock
+    command: dnsdock --dns=":53" --http=":80" --alias --all --verbose
+    expose:
+      - 53/udp
+      - 53/tcp
+      - 80/tcp
+      - 443/tcp
+    #ports:
+      #- 172.17.0.0:53:53/udp
+      #- 172.17.0.0:53:53/tcp
+      #- 10.69.69.2:53:53/udp
+      #- 10.69.69.2:53:53/tcp
+      #- 10.69.69.2:80:80/tcp
+      #- 10.69.69.2:443:443/tcp
+    volumes:
+      - /var/run/docker.sock:/run/docker.sock
+    restart: always
+    networks:
+      - dnsdock
+    #healthcheck:
+    #  test: ["CMD", "curl", "-f", "http://localhost"]
+    #  interval: 1m30s
+    #  timeout: 10s
+    #  retries: 3
+
+networks:
+  dnsdock:
+    ipam:
+      config:
+        - subnet: 10.69.69.0/30

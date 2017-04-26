@@ -1,4 +1,4 @@
-package: github.com/aacebedo/dnsdock
+package: github.com/akatrevorjay/dnsdock
 import:
 - package: github.com/docker/engine-api
   version: ~0.4.0
