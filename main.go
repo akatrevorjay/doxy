@@ -11,15 +11,17 @@ package main
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"io/ioutil"
+	"os"
+
 	"github.com/akatrevorjay/dnsdock/core"
 	"github.com/akatrevorjay/dnsdock/servers"
 	"github.com/akatrevorjay/dnsdock/utils"
 	"github.com/op/go-logging"
-	"io/ioutil"
-	"os"
 )
+
 // GitSummary contains the version number
-var GitSummary string 
+var GitSummary string
 var logger = logging.MustGetLogger("dnsdock.main")
 
 func main() {
@@ -72,9 +74,16 @@ func main() {
 		logger.Fatalf("Error: '%s'", err)
 	}
 
-	httpServer := servers.NewHTTPServer(config, dnsServer)
+	//httpServer := servers.NewHTTPServer(config, dnsServer)
+	//go func() {
+	//    if err := httpServer.Start(); err != nil {
+	//        logger.Fatalf("Error: '%s'", err)
+	//    }
+	//}()
+
+	httpProxyServer := servers.NewHTTPServer(config, dnsServer)
 	go func() {
-		if err := httpServer.Start(); err != nil {
+		if err := httpProxyServer.Start(); err != nil {
 			logger.Fatalf("Error: '%s'", err)
 		}
 	}()
@@ -82,5 +91,4 @@ func main() {
 	if err := dnsServer.Start(); err != nil {
 		logger.Fatalf("Error: '%s'", err)
 	}
-
 }
