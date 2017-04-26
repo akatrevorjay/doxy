@@ -10,19 +10,20 @@ package core
 
 import (
 	"fmt"
+	"strconv"
+
 	"github.com/akatrevorjay/dnsdock/utils"
 	"gopkg.in/alecthomas/kingpin.v2"
-	"strconv"
 )
 
 // CommandLine structure handling parameter parsing
-type CommandLine struct{
-  app *kingpin.Application
+type CommandLine struct {
+	app *kingpin.Application
 }
 
 func NewCommandLine(version string) (res *CommandLine) {
-  res = &CommandLine{}
-  res.app = kingpin.New("dnsdock", "Automatic DNS for docker containers.")
+	res = &CommandLine{}
+	res.app = kingpin.New("dnsdock", "Automatic DNS for docker containers.")
 	res.app.Version(version)
 	res.app.HelpFlag.Short('h')
 	return
@@ -47,7 +48,7 @@ func (cmdline *CommandLine) ParseParameters(rawParams []string) (res *utils.Conf
 	createAlias := cmdline.app.Flag("alias", "Automatically create an alias with just the container name.").Default(strconv.FormatBool(res.CreateAlias)).Bool()
 	verbose := cmdline.app.Flag("verbose", "Verbose mode.").Default(strconv.FormatBool(res.Verbose)).Short('v').Bool()
 	quiet := cmdline.app.Flag("quiet", "Quiet mode.").Default(strconv.FormatBool(res.Quiet)).Short('q').Bool()
-  all := app.Flag("all", "Process all containers even if they are stopped.").Default(strconv.FormatBool(res.All)).Short('a').Bool()
+	all := app.Flag("all", "Process all containers even if they are stopped.").Default(strconv.FormatBool(res.All)).Short('a').Bool()
 
 	kingpin.MustParse(cmdline.app.Parse(rawParams))
 
@@ -65,6 +66,6 @@ func (cmdline *CommandLine) ParseParameters(rawParams []string) (res *utils.Conf
 	res.Ttl = *ttl
 	res.CreateAlias = *createAlias
 	res.All = *all
-  res.ForceTtl = *forceTtl
+	res.ForceTtl = *forceTtl
 	return
 }
