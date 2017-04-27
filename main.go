@@ -1,4 +1,4 @@
-/* dnsdock.go
+/* doxyroxy.go
  *
  * Copyright (C) 2016 Alexandre ACEBEDO
  *
@@ -14,15 +14,15 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/akatrevorjay/dnsdock/core"
-	"github.com/akatrevorjay/dnsdock/servers"
-	"github.com/akatrevorjay/dnsdock/utils"
+	"github.com/akatrevorjay/doxyroxy/core"
+	"github.com/akatrevorjay/doxyroxy/servers"
+	"github.com/akatrevorjay/doxyroxy/utils"
 	"github.com/op/go-logging"
 )
 
 // GitSummary contains the version number
 var GitSummary string
-var logger = logging.MustGetLogger("dnsdock.main")
+var logger = logging.MustGetLogger("doxyroxy.main")
 
 func main() {
 

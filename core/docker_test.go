@@ -9,7 +9,7 @@
 package core
 
 import (
-	"github.com/akatrevorjay/dnsdock/servers"
+	"github.com/akatrevorjay/doxyroxy/servers"
 	"reflect"
 	"testing"
 )

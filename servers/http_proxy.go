@@ -5,7 +5,7 @@ import (
 	"crypto/x509"
 	"net/http"
 
-	"github.com/akatrevorjay/dnsdock/utils"
+	"github.com/akatrevorjay/doxyroxy/utils"
 	"github.com/elazarl/goproxy"
 )
 

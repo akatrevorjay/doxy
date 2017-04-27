@@ -12,7 +12,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/akatrevorjay/dnsdock/utils"
+	"github.com/akatrevorjay/doxyroxy/utils"
 	"github.com/gorilla/mux"
 )
 

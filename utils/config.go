@@ -83,7 +83,7 @@ func NewConfig() *Config {
 	}
 
 	return &Config{
-		Name:		 "dnsdock",
+		Name:		 "doxyroxy",
 		Nameservers: nameservers{"8.8.8.8:53"},
 		DnsAddr:     ":8053",
 		Domain:      NewDomain("docker"),

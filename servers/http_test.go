@@ -9,7 +9,7 @@
 package servers
 
 import (
-	"github.com/akatrevorjay/dnsdock/utils"
+	"github.com/akatrevorjay/doxyroxy/utils"
 	"io/ioutil"
 	"net/http"
 	"strings"

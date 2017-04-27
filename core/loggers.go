@@ -12,4 +12,4 @@ import (
 	"github.com/op/go-logging"
 )
 
-var logger = logging.MustGetLogger("dnsdock.core")
+var logger = logging.MustGetLogger("doxyroxy.core")

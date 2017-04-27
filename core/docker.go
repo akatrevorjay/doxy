@@ -17,8 +17,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/akatrevorjay/dnsdock/servers"
-	"github.com/akatrevorjay/dnsdock/utils"
+	"github.com/akatrevorjay/doxyroxy/servers"
+	"github.com/akatrevorjay/doxyroxy/utils"
 	"github.com/docker/engine-api/client"
 	"github.com/docker/engine-api/types"
 	eventtypes "github.com/docker/engine-api/types/events"
