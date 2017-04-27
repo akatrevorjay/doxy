@@ -11,6 +11,12 @@ package core
 import (
 	"crypto/tls"
 	"errors"
+	"fmt"
+	"net"
+	"regexp"
+	"strconv"
+	"strings"
+
 	"github.com/akatrevorjay/dnsdock/servers"
 	"github.com/akatrevorjay/dnsdock/utils"
 	"github.com/docker/engine-api/client"
@@ -18,10 +24,6 @@ import (
 	eventtypes "github.com/docker/engine-api/types/events"
 	"github.com/vdemeester/docker-events"
 	"golang.org/x/net/context"
-	"net"
-	"regexp"
-	"strconv"
-	"strings"
 )
 
 // DockerManager is the entrypoint to the docker daemon
@@ -149,8 +151,12 @@ func (d *DockerManager) getService(id string) (*servers.Service, error) {
 		}
 	}
 
-	service = overrideFromLabels(service, desc.Config.Labels)
-	service = overrideFromEnv(service, splitEnv(desc.Config.Env))
+	//applyLabelOverrides(&service, desc.Config.Labels, d.config.LabelPrefix)
+	service = applyLabelOverrides(service, desc.Config.Labels, d.config.Name)
+
+	service = applyEnvOverrides(service, splitEnv(desc.Config.Env), "SERVICE")
+	service = applyEnvOverrides(service, splitEnv(desc.Config.Env), d.config.Name)
+
 	if service == nil {
 		return nil, errors.New("Skipping " + id)
 	}
@@ -201,134 +207,88 @@ func splitEnv(in []string) (out map[string]string) {
 	return
 }
 
-func overrideFromLabels(in *servers.Service, labels map[string]string) (out *servers.Service) {
+func applyOverride(in *servers.Service, k string, v string) *servers.Service {
+	mrclean, err := regexp.Compile("[^a-zA-Z0-9]+")
+	// Go is so great! I love checking this. That's enterprise.
+	if err != nil {
+		logger.Fatal(err)
+	}
+	cleanedK := mrclean.ReplaceAllString(strings.ToLower(k), "")
+
 	var region string
-	for k, v := range labels {
-		if k == "com.dnsdock.ignore" {
-			return nil
+	switch cleanedK {
+	case "ignore":
+		return nil
+
+	case "alias", "aliases":
+		in.Aliases = strings.Split(v, ",")
+
+	case "name":
+		in.Name = v
+
+	case "tags":
+		if len(v) == 0 {
+			in.Name = ""
+		} else {
+			in.Name = strings.Split(v, ",")[0]
 		}
 
-		if k == "com.dnsdock.alias" {
-			in.Aliases = strings.Split(v, ",")
+	case "image":
+		in.Image = v
+
+	case "ttl":
+		if ttl, err := strconv.Atoi(v); err == nil {
+			in.TTL = ttl
 		}
 
-		if k == "com.dnsdock.name" {
-			in.Name = v
+	case "region":
+		region = v
+
+	case "ip", "ipaddr", "ipaddress":
+		ipAddr := net.ParseIP(v)
+		if ipAddr != nil {
+			in.IPs = in.IPs[:0]
+			in.IPs = append(in.IPs, ipAddr)
 		}
 
-		if k == "com.dnsdock.tags" {
-			if len(v) == 0 {
-				in.Name = ""
-			} else {
-				in.Name = strings.Split(v, ",")[0]
+	case "prefix":
+		addrs := make([]net.IP, 0)
+		for _, value := range in.IPs {
+			if strings.HasPrefix(value.String(), v) {
+				addrs = append(addrs, value)
 			}
 		}
-
-		if k == "com.dnsdock.image" {
-			in.Image = v
+		if len(addrs) == 0 {
+			logger.Warningf("The prefix '%s' didn't match any IP addresses of service '%s', the service will be ignored", v, in.Name)
 		}
-
-		if k == "com.dnsdock.ttl" {
-			if ttl, err := strconv.Atoi(v); err == nil {
-				in.TTL = ttl
-			}
-		}
-
-		if k == "com.dnsdock.region" {
-			region = v
-		}
-
-		if k == "com.dnsdock.ip_addr" {
-			ipAddr := net.ParseIP(v)
-			if ipAddr != nil {
-				in.IPs = in.IPs[:0]
-				in.IPs = append(in.IPs, ipAddr)
-			}
-		}
-
-		if k == "com.dnsdock.prefix" {
-			addrs := make([]net.IP, 0)
-			for _, value := range in.IPs {
-				if strings.HasPrefix(value.String(), v) {
-					addrs = append(addrs, value)
-				}
-			}
-			if len(addrs) == 0 {
-				logger.Warningf("The prefix '%s' didn't match any IP addresses of service '%s', the service will be ignored", v, in.Name)
-			}
-			in.IPs = addrs
-		}
+		in.IPs = addrs
 	}
 
 	if len(region) > 0 {
 		in.Image = in.Image + "." + region
 	}
-	out = in
-	return
+	return in
 }
 
-func overrideFromEnv(in *servers.Service, env map[string]string) (out *servers.Service) {
-	var region string
-	for k, v := range env {
-		if k == "DNSDOCK_IGNORE" || k == "SERVICE_IGNORE" {
-			return nil
+func applyOverrides(svc *servers.Service, mapping map[string]string, prefix string) *servers.Service {
+	var name string
+	for k, v := range mapping {
+		if !strings.HasPrefix(k, prefix) {
+			continue
 		}
+		name = k[len(prefix):]
 
-		if k == "DNSDOCK_ALIAS" {
-			in.Aliases = strings.Split(v, ",")
-		}
-
-		if k == "DNSDOCK_NAME" {
-			in.Name = v
-		}
-
-		if k == "SERVICE_TAGS" {
-			if len(v) == 0 {
-				in.Name = ""
-			} else {
-				in.Name = strings.Split(v, ",")[0]
-			}
-		}
-
-		if k == "DNSDOCK_IMAGE" || k == "SERVICE_NAME" {
-			in.Image = v
-		}
-
-		if k == "DNSDOCK_TTL" {
-			if ttl, err := strconv.Atoi(v); err == nil {
-				in.TTL = ttl
-			}
-		}
-
-		if k == "SERVICE_REGION" {
-			region = v
-		}
-
-		if k == "DNSDOCK_IPADDRESS" {
-			ipAddr := net.ParseIP(v)
-			if ipAddr != nil {
-				in.IPs = in.IPs[:0]
-				in.IPs = append(in.IPs, ipAddr)
-			}
-		}
-
-		if k == "DNSDOCK_PREFIX" {
-			addrs := make([]net.IP, 0)
-			for _, value := range in.IPs {
-				if strings.HasPrefix(value.String(), v) {
-					addrs = append(addrs, value)
-				}
-			}
-			if len(addrs) == 0 {
-				logger.Warningf("The prefix '%s' didn't match any IP address of  service '%s', the service will be ignored", v, in.Name)
-			}
-			in.IPs = addrs
-		}
+		svc = applyOverride(svc, name, v)
 	}
+	return svc
+}
 
-	if len(region) > 0 {
-		in.Image = in.Image + "." + region
-	}
-	out = in
-	return
+func applyLabelOverrides(svc *servers.Service, labels map[string]string, prefix string) *servers.Service {
+	prefix += "."
+	return applyOverrides(svc, labels, prefix)
+}
+
+func applyEnvOverrides(svc *servers.Service, env map[string]string, prefix string) *servers.Service {
+	prefix = fmt.Sprintf("%s_", strings.ToUpper(prefix))
+	return applyOverrides(svc, env, prefix)
 }

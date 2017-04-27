@@ -27,10 +27,12 @@ var logger = logging.MustGetLogger("dnsdock.main")
 func main() {
 
 	var cmdLine = core.NewCommandLine(GitSummary)
+
 	config, err := cmdLine.ParseParameters(os.Args[1:])
 	if err != nil {
 		logger.Fatalf(err.Error())
 	}
+
 	verbosity := 0
 	if config.Quiet == false {
 		if config.Verbose == false {
@@ -39,6 +41,7 @@ func main() {
 			verbosity = 2
 		}
 	}
+
 	err = utils.InitLoggers(verbosity)
 	if err != nil {
 		logger.Fatalf("Unable to initialize loggers! %s", err.Error())

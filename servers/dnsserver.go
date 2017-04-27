@@ -11,13 +11,14 @@ package servers
 import (
 	"errors"
 	"fmt"
-	"github.com/akatrevorjay/dnsdock/utils"
-	"github.com/miekg/dns"
 	"net"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/akatrevorjay/dnsdock/utils"
+	"github.com/miekg/dns"
 )
 
 // Service represents a container and an attached DNS record
@@ -157,26 +158,102 @@ func (s *DNSServer) GetAllServices() map[string]Service {
 	return list
 }
 
+// NewSlice : Create a slice containing a range of elements.
+//
+//  start: First value of the sequence.
+//  end:   The sequence is ended upon reaching the end value.
+//  step:  step will be used as the increment between elements in the sequence.
+//		   step should be given as a positive, negative or zero number.
+//
+//	returns: Slice of elements from start to end over step, inclusive.
+func newIntSlice(start, count, step int) []int {
+	s := make([]int, count)
+	for i := range s {
+		s[i] = start
+		start += step
+	}
+	return s
+}
+
+func domainJoin(parts ...string) string {
+	return strings.Join(parts, ".")
+}
+
+func isDomainEnded(domain string) bool {
+	return strings.HasSuffix(domain, ".")
+}
+
+func unpack(s []string, vars ...*string) {
+	for i, str := range s {
+		*vars[i] = str
+	}
+}
+
 func (s *DNSServer) listDomains(service *Service) chan string {
-	c := make(chan string)
+	logger.Debugf("Service name=%s", service.Name)
+	//utils.Dump(service)
 
-	go func() {
+	gen := func() chan string {
+		out := make(chan string)
+		go func() {
+			// Service name
+			out <- service.Name
 
-		if service.Image == "" {
-			c <- service.Name + "." + s.config.Domain.String() + "."
-		} else {
-			domain := service.Image + "." + s.config.Domain.String() + "."
+			// Set aliases for this service (ie from labels)
+			for _, alias := range service.Aliases {
+				out <- alias
+			}
 
-			c <- service.Name + "." + domain
-			c <- domain
-		}
+			// SCRATCH THAT USE LABELS TO GEN ALIASES
+			//// Compose style: `project_service_idx` gets churned into:
+			//// - i.s.p
+			//// - s.p
+			//// - p
+			//parts := strings.Split(service.Name, "_")
+			//if len(parts) == 3 {
+			//    for i := range parts {
+			//        out <- domainJoin(reverse(parts[:i+1])...)
+			//    }
+			//}
 
-		for _, alias := range service.Aliases {
-			c <- alias + "."
-		}
+			close(out)
+		}()
+		return out
+	}
 
-		close(c)
-	}()
+	aliasSuffix := func(in chan string, suffix string, orig bool) chan string {
+		out := make(chan string)
+		go func() {
+			for domain := range in {
+				if domain == "" {
+					continue
+				}
+
+				//logger.Debugf("aliasing domain=%s with suffix=%s", domain, suffix)
+				out <- domain + suffix
+				if orig {
+					out <- domain
+				}
+			}
+			out <- suffix[1:]
+			close(out)
+		}()
+		return out
+	}
+
+	// Primordial goo
+	c := gen()
+
+	if service.Image != "" {
+		// If we happen to know our image, add as suffix
+		c = aliasSuffix(c, domainJoin("", service.Image), true)
+	}
+
+	// Domain suffix
+	c = aliasSuffix(c, domainJoin("", s.config.Domain.String()), true)
+
+	// All must end with a period.
+	c = aliasSuffix(c, ".", false)
 
 	return c
 }
@@ -423,6 +500,7 @@ func (s *DNSServer) queryServices(query string) chan *Service {
 		for _, service := range s.services {
 			// create the name for this service, skip empty strings
 			test := []string{}
+
 			// todo: add some cache to avoid calculating this every time
 			if len(service.Name) > 0 {
 				test = append(test, strings.Split(strings.ToLower(service.Name), ".")...)
@@ -484,15 +562,17 @@ func (s *DNSServer) getExpandedID(in string) (out string) {
 // for a long time. The other defaults left as is(skydns source) because they
 // do not have an use case in this situation.
 func (s *DNSServer) createSOA() []dns.RR {
-	dom := dns.Fqdn(s.config.Domain.String() + ".")
+	dom := s.config.Domain.String()
+	name := s.config.Name
 	soa := &dns.SOA{
 		Hdr: dns.RR_Header{
 			Name:   dom,
 			Rrtype: dns.TypeSOA,
 			Class:  dns.ClassINET,
-			Ttl:    uint32(s.config.Ttl)},
-		Ns:      "dnsdock." + dom,
-		Mbox:    "dnsdock.dnsdock." + dom,
+			Ttl:    uint32(s.config.Ttl),
+		},
+		Ns:      domainJoin(name, dom, ""),
+		Mbox:    domainJoin(name, name, dom, ""),
 		Serial:  uint32(time.Now().Truncate(time.Hour).Unix()),
 		Refresh: 28800,
 		Retry:   7200,

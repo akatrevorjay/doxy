@@ -9,6 +9,8 @@ import (
 	"github.com/elazarl/goproxy"
 )
 
+// TODO Generate this on startup if it's non-existent (file)
+
 var caCert = []byte(`-----BEGIN CERTIFICATE-----
 MIIDkzCCAnugAwIBAgIJAKe/ZGdfcHdPMA0GCSqGSIb3DQEBCwUAMGAxCzAJBgNV
 BAYTAkFVMRMwEQYDVQQIDApTb21lLVN0YXRlMSEwHwYDVQQKDBhJbnRlcm5ldCBX
