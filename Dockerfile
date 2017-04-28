@@ -3,7 +3,7 @@ FROM golang:1.8
 RUN go get -u -v github.com/golang/lint/golint \
  && go get -u -v github.com/Masterminds/glide
 
-WORKDIR /go/src/github.com/akatrevorjay/dnsdock
+WORKDIR /go/src/github.com/akatrevorjay/doxyroxy
 
 COPY glide.* ./
 RUN glide i
@@ -15,4 +15,4 @@ COPY *.go ./
 
 RUN go install .
 
-CMD ["dnsdock"]
+CMD ["doxyroxy"]
