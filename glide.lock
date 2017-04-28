@@ -1,5 +1,5 @@
-hash: 4fbffd4ebc698afc65fd8c69ea189b11ddc16346d587f966e4dde62ddfe4264c
-updated: 2017-04-26T04:58:53.372162301-07:00
+hash: 8dc54caa6a6f6df3189d028d7ddb67375128852251bd50996d30aca1590d37d8
+updated: 2017-04-27T16:03:55.719749956-07:00
 imports:
 - name: github.com/alecthomas/template
   version: a0175ee3bccc567396460bf5acd36800cb10c49c
@@ -38,6 +38,8 @@ imports:
   - tlsconfig
 - name: github.com/docker/go-units
   version: f2d77a61e3c169b43402a0a1e84f06daf29b8190
+- name: github.com/elazarl/goproxy
+  version: aacba83f36a55ac31cbb71c06547a328c0cd1604
 - name: github.com/gorilla/context
   version: aed02d124ae4a0e94fea4541c8effd05bf0c8296
 - name: github.com/gorilla/mux

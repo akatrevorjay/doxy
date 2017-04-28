@@ -175,14 +175,6 @@ func newIntSlice(start, count, step int) []int {
 	return s
 }
 
-func domainJoin(parts ...string) string {
-	return strings.Join(parts, ".")
-}
-
-func isDomainEnded(domain string) bool {
-	return strings.HasSuffix(domain, ".")
-}
-
 func unpack(s []string, vars ...*string) {
 	for i, str := range s {
 		*vars[i] = str
@@ -204,18 +196,6 @@ func (s *DNSServer) listDomains(service *Service) chan string {
 				out <- alias
 			}
 
-			// SCRATCH THAT USE LABELS TO GEN ALIASES
-			//// Compose style: `project_service_idx` gets churned into:
-			//// - i.s.p
-			//// - s.p
-			//// - p
-			//parts := strings.Split(service.Name, "_")
-			//if len(parts) == 3 {
-			//    for i := range parts {
-			//        out <- domainJoin(reverse(parts[:i+1])...)
-			//    }
-			//}
-
 			close(out)
 		}()
 		return out
@@ -235,7 +215,6 @@ func (s *DNSServer) listDomains(service *Service) chan string {
 					out <- domain
 				}
 			}
-			out <- suffix[1:]
 			close(out)
 		}()
 		return out
@@ -246,11 +225,11 @@ func (s *DNSServer) listDomains(service *Service) chan string {
 
 	if service.Image != "" {
 		// If we happen to know our image, add as suffix
-		c = aliasSuffix(c, domainJoin("", service.Image), true)
+		c = aliasSuffix(c, utils.DomainJoin("", service.Image), true)
 	}
 
 	// Domain suffix
-	c = aliasSuffix(c, domainJoin("", s.config.Domain.String()), true)
+	c = aliasSuffix(c, utils.DomainJoin("", s.config.Domain.String()), true)
 
 	// All must end with a period.
 	c = aliasSuffix(c, ".", false)
@@ -470,7 +449,7 @@ func (s *DNSServer) handleReverseRequest(w dns.ResponseWriter, r *dns.Msg) {
 func (s *DNSServer) queryIP(query string) chan *Service {
 	c := make(chan *Service, 3)
 	reversedIP := strings.TrimSuffix(query, ".in-addr.arpa")
-	ip := strings.Join(reverse(strings.Split(reversedIP, ".")), ".")
+	ip := strings.Join(utils.Reverse(strings.Split(reversedIP, ".")), ".")
 
 	go func() {
 		defer s.lock.RUnlock()
@@ -571,8 +550,8 @@ func (s *DNSServer) createSOA() []dns.RR {
 			Class:  dns.ClassINET,
 			Ttl:    uint32(s.config.Ttl),
 		},
-		Ns:      domainJoin(name, dom, ""),
-		Mbox:    domainJoin(name, name, dom, ""),
+		Ns:      utils.DomainJoin(name, dom, ""),
+		Mbox:    utils.DomainJoin(name, name, dom, ""),
 		Serial:  uint32(time.Now().Truncate(time.Hour).Unix()),
 		Refresh: 28800,
 		Retry:   7200,
@@ -598,12 +577,4 @@ func isPrefixQuery(query, name []string) bool {
 		}
 	}
 	return true
-}
-
-func reverse(input []string) []string {
-	if len(input) == 0 {
-		return input
-	}
-
-	return append(reverse(input[1:]), input[0])
 }

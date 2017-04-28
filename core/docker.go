@@ -162,9 +162,26 @@ func (d *DockerManager) getService(id string) (*servers.Service, error) {
 	}
 
 	if d.config.CreateAlias {
-		service.Aliases = append(service.Aliases, service.Name)
+		aliases, _ := genAliases(service)
+		service.Aliases = append(service.Aliases, aliases...)
 	}
 	return service, nil
+}
+
+func genAliases(service *servers.Service) (out []string, err error) {
+	// Compose style: `project_service_idx` gets churned into:
+	// - i.s.p
+	// - s.p
+	parts := strings.Split(service.Name, "_")
+	if len(parts) == 3 {
+		// i.s.p
+		out = append(out, utils.DomainJoin(utils.Reverse(parts)...))
+
+		// s.p
+		out = append(out, utils.DomainJoin(utils.Reverse(parts[:len(parts)-1])...))
+	}
+
+	return out, err
 }
 
 func getImageName(tag string) string {
