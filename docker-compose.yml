@@ -1,11 +1,11 @@
 version: '3'
 
 services:
-  dnsdock:
+  doxyroxy:
     build: .
-    hostname: dnsdock
-    container_name: dnsdock
-    command: dnsdock --dns=":53" --http=":80" --alias --all --verbose
+    hostname: doxyroxy
+    container_name: doxyroxy
+    command: doxyroxy --alias --verbose
     expose:
       - 8053/udp
       - 8053/tcp
