@@ -7,11 +7,15 @@ services:
     container_name: dnsdock
     command: dnsdock --dns=":53" --http=":80" --alias --all --verbose
     expose:
-      - 53/udp
-      - 53/tcp
-      - 80/tcp
-      - 443/tcp
+      - 8053/udp
+      - 8053/tcp
+      - 8080/tcp
+      - 8443/tcp
     #ports:
+      #- 53:8053/udp
+      #- 53:8053/tcp
+      #- 80:8080
+      #- 443:8443
       #- 172.17.0.0:53:53/udp
       #- 172.17.0.0:53:53/tcp
       #- 10.69.69.2:53:53/udp
