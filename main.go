@@ -84,7 +84,7 @@ func main() {
 	//    }
 	//}()
 
-	httpProxyServer := servers.NewHTTPServer(config, dnsServer)
+	httpProxyServer := servers.NewHTTPProxyServer(config, dnsServer)
 	go func() {
 		if err := httpProxyServer.Start(); err != nil {
 			logger.Fatalf("Error: '%s'", err)

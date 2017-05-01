@@ -38,6 +38,7 @@ func (cmdline *CommandLine) ParseParameters(rawParams []string) (res *utils.Conf
 	quiet := cmdline.app.Flag("quiet", "Quiet mode.").Default(strconv.FormatBool(res.Quiet)).Short('q').Bool()
 
 	http := cmdline.app.Flag("http", "Listen HTTP requests on this address").Default(res.HttpAddr).Short('H').String()
+	https := cmdline.app.Flag("https", "Listen HTTPS requests on this address").Default(res.HttpsAddr).Short('I').String()
 	dns := cmdline.app.Flag("dns", "Listen DNS requests on this address").Default(res.DnsAddr).Short('D').String()
 
 	domain := cmdline.app.Flag("domain", "Domain that is appended to all requests").Default(res.Domain.String()).String()
@@ -63,6 +64,7 @@ func (cmdline *CommandLine) ParseParameters(rawParams []string) (res *utils.Conf
 	res.Nameservers = *nameservers
 	res.DnsAddr = *dns
 	res.HttpAddr = *http
+	res.HttpsAddr = *https
 	res.Domain = utils.NewDomain(fmt.Sprintf("%s.%s", *environment, *domain))
 	res.DockerHost = *docker
 	res.TlsVerify = *tlsverify
