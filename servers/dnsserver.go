@@ -27,6 +27,7 @@ type Service struct {
 	Image   string
 	IPs     []net.IP
 	TTL     int
+	Primary string
 	Aliases []string
 }
 
@@ -37,10 +38,11 @@ func NewService() (s *Service) {
 }
 func (s Service) String() string {
 	return fmt.Sprintf(` Name:    %s
+                       Primary: %s
                        Aliases: %s
                        IPs:     %s
                        TTL:     %d
-        `, s.Name, s.Aliases, s.IPs, s.TTL)
+        `, s.Name, s.Primary, s.Aliases, s.IPs, s.TTL)
 }
 
 // ServiceListProvider represents the entrypoint to get containers
@@ -90,8 +92,16 @@ func (s *DNSServer) Stop() {
 	s.server.Shutdown()
 }
 
+func (s *DNSServer) getServicePrimary(svc Service) string {
+	return utils.DomainJoin(svc.Name, s.config.Domain.String(), "")
+}
+
 // AddService adds a new container and thus new DNS records
 func (s *DNSServer) AddService(id string, service Service) {
+	if len(service.Primary) == 0 {
+		service.Primary = s.getServicePrimary(service)
+	}
+
 	if len(service.IPs) > 0 {
 		defer s.lock.Unlock()
 		s.lock.Lock()
@@ -310,6 +320,28 @@ func (s *DNSServer) makeServiceMX(n string, service *Service) dns.RR {
 	return rr
 }
 
+func (s *DNSServer) makeServiceCNAME(n string, service *Service) dns.RR {
+	rr := new(dns.CNAME)
+
+	var ttl int
+	if service.TTL != -1 {
+		ttl = service.TTL
+	} else {
+		ttl = s.config.Ttl
+	}
+
+	rr.Hdr = dns.RR_Header{
+		Name:   n,
+		Rrtype: dns.TypeCNAME,
+		Class:  dns.ClassINET,
+		Ttl:    uint32(ttl),
+	}
+
+	rr.Target = service.Primary
+
+	return rr
+}
+
 func (s *DNSServer) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 	m := new(dns.Msg)
 	m.SetReply(r)
@@ -339,31 +371,15 @@ func (s *DNSServer) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 
 	logger.Debugf("DNS request for query '%s' from remote '%s'", query, w.RemoteAddr())
 
-	var ttl int
-
 	for service := range s.queryServices(query) {
 		var rr dns.RR
 		switch r.Question[0].Qtype {
 		case dns.TypeA:
-			primary := utils.DomainJoin(service.Name, s.config.Domain.String(), "")
-			logger.Debugf("Service: %s primary=%s n=%s", service.Name, primary, r.Question[0].Name)
-			if r.Question[0].Name != primary {
-				if service.TTL != -1 {
-					ttl = service.TTL
-				} else {
-					ttl = s.config.Ttl
-				}
-				rr := new(dns.CNAME)
-				rr.Hdr = dns.RR_Header{
-					Name:   r.Question[0].Name,
-					Rrtype: dns.TypeCNAME,
-					Class:  dns.ClassINET,
-					Ttl:    uint32(ttl),
-				}
-				rr.Target = primary
+			if r.Question[0].Name != service.Primary {
+				rr = s.makeServiceCNAME(r.Question[0].Name, service)
 				m.Answer = append(m.Answer, rr)
 			}
-			rr = s.makeServiceA(primary, service)
+			rr = s.makeServiceA(service.Primary, service)
 		case dns.TypeMX:
 			rr = s.makeServiceMX(r.Question[0].Name, service)
 		default:
