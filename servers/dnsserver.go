@@ -259,14 +259,15 @@ func (s *DNSServer) handleForward(w dns.ResponseWriter, r *dns.Msg) {
 }
 
 func (s *DNSServer) makeServiceA(n string, service *Service) dns.RR {
-	rr := new(dns.A)
-
 	var ttl int
 	if service.TTL != -1 {
 		ttl = service.TTL
 	} else {
 		ttl = s.config.Ttl
 	}
+
+
+	rr := new(dns.A)
 
 	rr.Hdr = dns.RR_Header{
 		Name:   n,
@@ -338,11 +339,31 @@ func (s *DNSServer) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 
 	logger.Debugf("DNS request for query '%s' from remote '%s'", query, w.RemoteAddr())
 
+	var ttl int
+
 	for service := range s.queryServices(query) {
 		var rr dns.RR
 		switch r.Question[0].Qtype {
 		case dns.TypeA:
-			rr = s.makeServiceA(r.Question[0].Name, service)
+			primary := utils.DomainJoin(service.Name, s.config.Domain.String(), "")
+			logger.Debugf("Service: %s primary=%s n=%s", service.Name, primary, r.Question[0].Name)
+			if r.Question[0].Name != primary {
+				if service.TTL != -1 {
+					ttl = service.TTL
+				} else {
+					ttl = s.config.Ttl
+				}
+				rr := new(dns.CNAME)
+				rr.Hdr = dns.RR_Header{
+					Name:   r.Question[0].Name,
+					Rrtype: dns.TypeCNAME,
+					Class:  dns.ClassINET,
+					Ttl:    uint32(ttl),
+				}
+				rr.Target = primary
+				m.Answer = append(m.Answer, rr)
+			}
+			rr = s.makeServiceA(primary, service)
 		case dns.TypeMX:
 			rr = s.makeServiceMX(r.Question[0].Name, service)
 		default:
