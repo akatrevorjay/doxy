@@ -25,7 +25,6 @@ var GitSummary string
 var logger = logging.MustGetLogger("doxyroxy.main")
 
 func main() {
-
 	var cmdLine = core.NewCommandLine(GitSummary)
 
 	config, err := cmdLine.ParseParameters(os.Args[1:])
@@ -76,13 +75,6 @@ func main() {
 	if err := docker.Start(); err != nil {
 		logger.Fatalf("Error: '%s'", err)
 	}
-
-	//httpServer := servers.NewHTTPServer(config, dnsServer)
-	//go func() {
-	//    if err := httpServer.Start(); err != nil {
-	//        logger.Fatalf("Error: '%s'", err)
-	//    }
-	//}()
 
 	httpProxyServer := servers.NewHTTPProxyServer(config, dnsServer)
 	go func() {

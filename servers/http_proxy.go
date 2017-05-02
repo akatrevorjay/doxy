@@ -176,13 +176,13 @@ func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider) *ProxyHttpSer
 func (s *ProxyHttpServer) Start() error {
 	logger.Infof("Server starting up! - configured to listen on http interface %s and https interface %s", s.config.HttpAddr, s.config.HttpsAddr)
 
-	go func() {
-		// listen to the TLS ClientHello but make it a CONNECT request instead
-		ln, err := net.Listen("tcp", s.config.HttpsAddr)
-		if err != nil {
-			logger.Fatalf("Error listening for https connections - %v", err)
-		}
+	// listen to the TLS ClientHello but make it a CONNECT request instead
+	ln, err := net.Listen("tcp", s.config.HttpsAddr)
+	if err != nil {
+		logger.Fatalf("Error listening for https connections - %v", err)
+	}
 
+	go func() {
 		for {
 			c, err := ln.Accept()
 			if err != nil {
