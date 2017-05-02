@@ -218,44 +218,6 @@ func (service *Service) ListDomains(suffix string, end bool) chan string {
 	return c
 }
 
-//func (service *Service) ListDomains420(suffix string) chan string {
-//    logger.Debugf("Service name=%s", service.Name)
-
-//    gen := func() chan string {
-//        out := make(chan string)
-//        go func() {
-//            // Service name
-//            out <- service.Name
-
-//            // Set aliases for this service (ie from labels)
-//            for _, alias := range service.Aliases {
-//                out <- alias
-//            }
-
-//            close(out)
-//        }()
-//        return out
-//    }
-
-//    // Primordial goo
-//    c := gen()
-
-//    if service.Image != "" {
-//        // If we happen to know our image, add as suffix
-//        c = ChanSuffix(c, utils.DomainJoin("", service.Image), true)
-//    }
-
-//    // Domain suffix
-//    if suffix != "" {
-//        c = ChanSuffix(c, utils.DomainJoin("", suffix), true)
-//    }
-
-//    // All must end with a period.
-//    c = aliasSuffix(c, ".", false)
-
-//    return c
-//}
-
 func (s *DNSServer) handleForward(w dns.ResponseWriter, r *dns.Msg) {
 
 	logger.Debugf("Using DNS forwarding for '%s'", r.Question[0].Name)
@@ -517,45 +479,10 @@ func (s *DNSServer) queryServices(query string) chan *Service {
 		}
 
 		close(c)
-
 	}()
 
 	return c
 }
-
-//func (s *Service) hasPrefixMatch(query string, suffix string) bool {
-//    squery := utils.DomainSplit(query)
-
-//    for domain := range s.ListDomains(suffix) {
-//        sdomain := utils.DomainSplit(domain)
-//        if isPrefixQuery(squery, sdomain) {
-//            return true
-//        }
-//    }
-//    return false
-//}
-
-//func (s *DNSServer) queryServices(query string) chan *Service {
-//    c := make(chan *Service, 3)
-
-//    go func() {
-//        suffix := s.config.Domain.String()
-
-//        defer s.lock.RUnlock()
-//        s.lock.RLock()
-
-//        for _, service := range s.services {
-//            if service.hasPrefixMatch(query, suffix) {
-//                c <- service
-//            }
-//        }
-
-//        close(c)
-
-//    }()
-
-//    return c
-//}
 
 // Checks for a partial match for container SHA and outputs it if found.
 func (s *DNSServer) getExpandedID(in string) (out string) {
