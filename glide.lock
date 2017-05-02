@@ -1,5 +1,5 @@
 hash: 8dc54caa6a6f6df3189d028d7ddb67375128852251bd50996d30aca1590d37d8
-updated: 2017-04-27T16:03:55.719749956-07:00
+updated: 2017-05-01T17:00:06.73624534-07:00
 imports:
 - name: github.com/alecthomas/template
   version: a0175ee3bccc567396460bf5acd36800cb10c49c
@@ -40,10 +40,10 @@ imports:
   version: f2d77a61e3c169b43402a0a1e84f06daf29b8190
 - name: github.com/elazarl/goproxy
   version: aacba83f36a55ac31cbb71c06547a328c0cd1604
-- name: github.com/gorilla/context
-  version: aed02d124ae4a0e94fea4541c8effd05bf0c8296
 - name: github.com/gorilla/mux
   version: 392c28fe23e1c45ddba891b0320b3b5df220beea
+- name: github.com/inconshreveable/go-vhost
+  version: 06d84117953b22058c096b49a429ebd4f3d3d97b
 - name: github.com/Microsoft/go-winio
   version: ce2922f643c8fd76b46cadc7f404a06282678b34
 - name: github.com/miekg/dns

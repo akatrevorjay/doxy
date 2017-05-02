@@ -158,32 +158,28 @@ func (s *DNSServer) GetAllServices() map[string]Service {
 	return list
 }
 
-// NewSlice : Create a slice containing a range of elements.
-//
-//  start: First value of the sequence.
-//  end:   The sequence is ended upon reaching the end value.
-//  step:  step will be used as the increment between elements in the sequence.
-//		   step should be given as a positive, negative or zero number.
-//
-//	returns: Slice of elements from start to end over step, inclusive.
-func newIntSlice(start, count, step int) []int {
-	s := make([]int, count)
-	for i := range s {
-		s[i] = start
-		start += step
-	}
-	return s
+// ChanSuffix Suffixes all items in a string channel with a given suffix
+func ChanSuffix(in chan string, suffix string, orig bool) chan string {
+	out := make(chan string)
+	go func() {
+		for domain := range in {
+			if domain == "" {
+				continue
+			}
+
+			//logger.Debugf("aliasing domain=%s with suffix=%s", domain, suffix)
+			out <- domain + suffix
+			if orig {
+				out <- domain
+			}
+		}
+		close(out)
+	}()
+	return out
 }
 
-func unpack(s []string, vars ...*string) {
-	for i, str := range s {
-		*vars[i] = str
-	}
-}
-
-func (s *DNSServer) listDomains(service *Service) chan string {
+func (service *Service) ListDomains(suffix string, end bool) chan string {
 	logger.Debugf("Service name=%s", service.Name)
-	//utils.Dump(service)
 
 	gen := func() chan string {
 		out := make(chan string)
@@ -201,41 +197,64 @@ func (s *DNSServer) listDomains(service *Service) chan string {
 		return out
 	}
 
-	aliasSuffix := func(in chan string, suffix string, orig bool) chan string {
-		out := make(chan string)
-		go func() {
-			for domain := range in {
-				if domain == "" {
-					continue
-				}
-
-				//logger.Debugf("aliasing domain=%s with suffix=%s", domain, suffix)
-				out <- domain + suffix
-				if orig {
-					out <- domain
-				}
-			}
-			close(out)
-		}()
-		return out
-	}
-
 	// Primordial goo
 	c := gen()
 
 	if service.Image != "" {
 		// If we happen to know our image, add as suffix
-		c = aliasSuffix(c, utils.DomainJoin("", service.Image), true)
+		c = ChanSuffix(c, utils.DomainJoin("", service.Image), true)
 	}
 
 	// Domain suffix
-	c = aliasSuffix(c, utils.DomainJoin("", s.config.Domain.String()), true)
+	if suffix != "" {
+		c = ChanSuffix(c, utils.DomainJoin("", suffix), true)
+	}
 
-	// All must end with a period.
-	c = aliasSuffix(c, ".", false)
+	if end {
+		// All must end with a period.
+		c = ChanSuffix(c, ".", false)
+	}
 
 	return c
 }
+
+//func (service *Service) ListDomains420(suffix string) chan string {
+//    logger.Debugf("Service name=%s", service.Name)
+
+//    gen := func() chan string {
+//        out := make(chan string)
+//        go func() {
+//            // Service name
+//            out <- service.Name
+
+//            // Set aliases for this service (ie from labels)
+//            for _, alias := range service.Aliases {
+//                out <- alias
+//            }
+
+//            close(out)
+//        }()
+//        return out
+//    }
+
+//    // Primordial goo
+//    c := gen()
+
+//    if service.Image != "" {
+//        // If we happen to know our image, add as suffix
+//        c = ChanSuffix(c, utils.DomainJoin("", service.Image), true)
+//    }
+
+//    // Domain suffix
+//    if suffix != "" {
+//        c = ChanSuffix(c, utils.DomainJoin("", suffix), true)
+//    }
+
+//    // All must end with a period.
+//    c = aliasSuffix(c, ".", false)
+
+//    return c
+//}
 
 func (s *DNSServer) handleForward(w dns.ResponseWriter, r *dns.Msg) {
 
@@ -402,9 +421,9 @@ func (s *DNSServer) handleReverseRequest(w dns.ResponseWriter, r *dns.Msg) {
 	}
 
 	m.Answer = make([]dns.RR, 0, 2)
-	query := r.Question[0].Name
 
 	// trim off any trailing dot
+	query := r.Question[0].Name
 	if query[len(query)-1] == '.' {
 		query = query[:len(query)-1]
 	}
@@ -423,7 +442,7 @@ func (s *DNSServer) handleReverseRequest(w dns.ResponseWriter, r *dns.Msg) {
 			ttl = s.config.Ttl
 		}
 
-		for domain := range s.listDomains(service) {
+		for domain := range service.ListDomains(s.config.Domain.String(), true) {
 			rr := new(dns.PTR)
 			rr.Hdr = dns.RR_Header{
 				Name:   r.Question[0].Name,
@@ -467,39 +486,33 @@ func (s *DNSServer) queryIP(query string) chan *Service {
 	return c
 }
 
+func (s *Service) hasPrefixMatch(query string, suffix string) string {
+	utils.Dump(query)
+	squery := utils.DomainSplit(query)
+
+	for domain := range s.ListDomains(suffix, false) {
+		utils.Dump(domain)
+
+		sdomain := utils.DomainSplit(domain)
+		if isPrefixQuery(squery, sdomain) {
+			return domain
+		}
+	}
+	return ""
+}
+
 func (s *DNSServer) queryServices(query string) chan *Service {
 	c := make(chan *Service, 3)
 
 	go func() {
-		query := strings.Split(strings.ToLower(query), ".")
+		suffix := s.config.Domain.String()
 
 		defer s.lock.RUnlock()
 		s.lock.RLock()
 
 		for _, service := range s.services {
-			// create the name for this service, skip empty strings
-			test := []string{}
-
-			// todo: add some cache to avoid calculating this every time
-			if len(service.Name) > 0 {
-				test = append(test, strings.Split(strings.ToLower(service.Name), ".")...)
-			}
-
-			if len(service.Image) > 0 {
-				test = append(test, strings.Split(service.Image, ".")...)
-			}
-
-			test = append(test, s.config.Domain...)
-
-			if isPrefixQuery(query, test) {
+			if domain := service.hasPrefixMatch(query, suffix); domain != "" {
 				c <- service
-			}
-
-			// check aliases
-			for _, alias := range service.Aliases {
-				if isPrefixQuery(query, strings.Split(alias, ".")) {
-					c <- service
-				}
 			}
 		}
 
@@ -508,8 +521,41 @@ func (s *DNSServer) queryServices(query string) chan *Service {
 	}()
 
 	return c
-
 }
+
+//func (s *Service) hasPrefixMatch(query string, suffix string) bool {
+//    squery := utils.DomainSplit(query)
+
+//    for domain := range s.ListDomains(suffix) {
+//        sdomain := utils.DomainSplit(domain)
+//        if isPrefixQuery(squery, sdomain) {
+//            return true
+//        }
+//    }
+//    return false
+//}
+
+//func (s *DNSServer) queryServices(query string) chan *Service {
+//    c := make(chan *Service, 3)
+
+//    go func() {
+//        suffix := s.config.Domain.String()
+
+//        defer s.lock.RUnlock()
+//        s.lock.RLock()
+
+//        for _, service := range s.services {
+//            if service.hasPrefixMatch(query, suffix) {
+//                c <- service
+//            }
+//        }
+
+//        close(c)
+
+//    }()
+
+//    return c
+//}
 
 // Checks for a partial match for container SHA and outputs it if found.
 func (s *DNSServer) getExpandedID(in string) (out string) {

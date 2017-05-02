@@ -172,7 +172,7 @@ func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider) *ProxyHttpSer
 	return s
 }
 
-// Start starts the http endpoint
+// Start starts the http endpoints
 func (s *ProxyHttpServer) Start() error {
 	logger.Infof("Server starting up! - configured to listen on http interface %s and https interface %s", s.config.HttpAddr, s.config.HttpsAddr)
 
