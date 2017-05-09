@@ -10,8 +10,6 @@ package servers
 
 import (
 	"errors"
-	"fmt"
-	"net"
 	"regexp"
 	"strings"
 	"sync"
@@ -19,38 +17,11 @@ import (
 
 	"github.com/akatrevorjay/doxyroxy/utils"
 	"github.com/miekg/dns"
+	"github.com/olebedev/emitter"
 )
 
-// Service represents a container and an attached DNS record
-type Service struct {
-	Name    string
-	Image   string
-	IPs     []net.IP
-	TTL     int
-	Primary string
-	Aliases []string
-}
-
-// NewService creates a new service
-func NewService() (s *Service) {
-	s = &Service{TTL: -1}
-	return
-}
-func (s Service) String() string {
-	return fmt.Sprintf(` Name:    %s
-                       Primary: %s
-                       Aliases: %s
-                       IPs:     %s
-                       TTL:     %d
-        `, s.Name, s.Primary, s.Aliases, s.IPs, s.TTL)
-}
-
-// ServiceListProvider represents the entrypoint to get containers
-type ServiceListProvider interface {
-	AddService(string, Service)
-	RemoveService(string) error
-	GetService(string) (Service, error)
-	GetAllServices() map[string]Service
+type ServiceList struct {
+	config *utils.Config
 }
 
 // DNSServer represents a DNS server
@@ -60,14 +31,16 @@ type DNSServer struct {
 	mux      *dns.ServeMux
 	services map[string]*Service
 	lock     *sync.RWMutex
+	events   *emitter.Emitter
 }
 
 // NewDNSServer create a new DNSServer
-func NewDNSServer(c *utils.Config) *DNSServer {
+func NewDNSServer(c *utils.Config, events *emitter.Emitter) *DNSServer {
 	s := &DNSServer{
 		config:   c,
 		services: make(map[string]*Service),
 		lock:     &sync.RWMutex{},
+		events:	  events,
 	}
 
 	logger.Debugf("Handling DNS requests for '%s'.", c.Domain.String())
@@ -111,10 +84,13 @@ func (s *DNSServer) AddService(id string, service Service) {
 
 		logger.Debugf(`Added service: '%s'
                       %s`, id, service)
+		<-s.events.Emit("service:added", id)
+		<-s.events.Emit("service:domain:primary", id, service.Primary)
 
-		for _, alias := range service.Aliases {
-			logger.Debugf("Handling DNS requests for '%s'.", alias)
-			s.mux.HandleFunc(alias+".", s.handleRequest)
+		for domain := range service.ListDomains(s.config.Domain.String(), true) {
+			logger.Debugf("Handling DNS requests for domain='%s'.", domain)
+			s.mux.HandleFunc(domain, s.handleRequest)
+			<-s.events.Emit("service:domain:added", id, domain)
 		}
 	} else {
 		logger.Warningf("Service '%s' ignored: No IP provided:", id, id)
@@ -131,13 +107,15 @@ func (s *DNSServer) RemoveService(id string) error {
 		return errors.New("No such service: " + id)
 	}
 
-	for _, alias := range s.services[id].Aliases {
-		s.mux.HandleRemove(alias + ".")
+	for domain := range s.services[id].ListDomains(s.config.Domain.String(), true) {
+		s.mux.HandleRemove(domain)
+		<-s.events.Emit("service:domain:removed", id, domain)
 	}
 
 	delete(s.services, id)
 
 	logger.Debugf("Removed service '%s'", id)
+	<-s.events.Emit("service:removed", id)
 
 	return nil
 }
@@ -275,7 +253,6 @@ func (s *DNSServer) makeServiceA(n string, service *Service) dns.RR {
 	} else {
 		ttl = s.config.Ttl
 	}
-
 
 	rr := new(dns.A)
 

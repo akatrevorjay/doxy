@@ -14,10 +14,12 @@ import (
 	"io/ioutil"
 	"os"
 
+	"github.com/olebedev/emitter"
+	"github.com/op/go-logging"
+
 	"github.com/akatrevorjay/doxyroxy/core"
 	"github.com/akatrevorjay/doxyroxy/servers"
 	"github.com/akatrevorjay/doxyroxy/utils"
-	"github.com/op/go-logging"
 )
 
 // GitSummary contains the version number
@@ -46,7 +48,10 @@ func main() {
 		logger.Fatalf("Unable to initialize loggers! %s", err.Error())
 	}
 
-	dnsServer := servers.NewDNSServer(config)
+	events := &emitter.Emitter{}
+	events.Use("*", emitter.Sync)
+
+	dnsServer := servers.NewDNSServer(config, events)
 
 	var tlsConfig *tls.Config
 	if config.TlsVerify {
@@ -68,7 +73,7 @@ func main() {
 		}
 	}
 
-	docker, err := core.NewDockerManager(config, dnsServer, tlsConfig)
+	docker, err := core.NewDockerManager(config, dnsServer, tlsConfig, events)
 	if err != nil {
 		logger.Fatalf("Error: '%s'", err)
 	}
@@ -76,7 +81,7 @@ func main() {
 		logger.Fatalf("Error: '%s'", err)
 	}
 
-	httpProxyServer := servers.NewHTTPProxyServer(config, dnsServer)
+	httpProxyServer := servers.NewHTTPProxyServer(config, dnsServer, events)
 	go func() {
 		if err := httpProxyServer.Start(); err != nil {
 			logger.Fatalf("Error: '%s'", err)

@@ -24,18 +24,20 @@ import (
 	eventtypes "github.com/docker/engine-api/types/events"
 	"github.com/vdemeester/docker-events"
 	"golang.org/x/net/context"
+	"github.com/olebedev/emitter"
 )
 
-// DockerManager is the entrypoint to the docker daemon
+// DckerManager is the entrypoint to the docker daemon
 type DockerManager struct {
 	config *utils.Config
 	list   servers.ServiceListProvider
 	client *client.Client
 	cancel context.CancelFunc
+	events *emitter.Emitter
 }
 
 // NewDockerManager creates a new DockerManager
-func NewDockerManager(c *utils.Config, list servers.ServiceListProvider, tlsConfig *tls.Config) (*DockerManager, error) {
+func NewDockerManager(c *utils.Config, list servers.ServiceListProvider, tlsConfig *tls.Config, events *emitter.Emitter) (*DockerManager, error) {
 	defaultHeaders := map[string]string{"User-Agent": "engine-api-cli-1.0"}
 	dclient, err := client.NewClient(c.DockerHost, "v1.22", nil, defaultHeaders)
 
@@ -43,15 +45,18 @@ func NewDockerManager(c *utils.Config, list servers.ServiceListProvider, tlsConf
 		return nil, err
 	}
 
-	return &DockerManager{config: c, list: list, client: dclient}, nil
+	return &DockerManager{config: c, list: list, client: dclient, events: events}, nil
 }
 
 // Start starts the DockerManager
 func (d *DockerManager) Start() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	d.cancel = cancel
+
 	startHandler := func(m eventtypes.Message) {
 		logger.Debugf("Started container '%s'", m.ID)
+		<-d.events.Emit("container:started", m.ID)
+
 		service, err := d.getService(m.ID)
 		if err != nil {
 			logger.Errorf("%s", err)
@@ -62,6 +67,8 @@ func (d *DockerManager) Start() error {
 
 	stopHandler := func(m eventtypes.Message) {
 		logger.Debugf("Stopped container '%s'", m.ID)
+		<-d.events.Emit("container:stopped", m.ID)
+
 		if !d.config.All {
 			d.list.RemoveService(m.ID)
 		} else {
@@ -74,7 +81,10 @@ func (d *DockerManager) Start() error {
 		name, ok2 := m.Actor.Attributes["oldName"]
 		if ok && ok2 {
 			logger.Debugf("Renamed container '%s' into '%s'", oldName, name)
+			<-d.events.Emit("container:renamed", m.ID, oldName, name)
+
 			d.list.RemoveService(oldName)
+
 			service, err := d.getService(m.ID)
 			if err != nil {
 				logger.Errorf("%s", err)
@@ -85,7 +95,8 @@ func (d *DockerManager) Start() error {
 	}
 
 	destroyHandler := func(m eventtypes.Message) {
-		logger.Debugf("Destroy container '%s'", m.ID)
+		logger.Debugf("Destroyed container '%s'", m.ID)
+		<-d.events.Emit("container:destroyed", m.ID)
 		if d.config.All {
 			d.list.RemoveService(m.ID)
 		}
