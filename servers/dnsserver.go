@@ -84,13 +84,12 @@ func (s *DNSServer) AddService(id string, service Service) {
 
 		logger.Debugf(`Added service: '%s'
                       %s`, id, service)
-		<-s.events.Emit("service:added", id)
-		<-s.events.Emit("service:domain:primary", id, service.Primary)
+		defer s.events.Emit("service:added", id)
 
 		for domain := range service.ListDomains(s.config.Domain.String(), true) {
 			logger.Debugf("Handling DNS requests for domain='%s'.", domain)
 			s.mux.HandleFunc(domain, s.handleRequest)
-			<-s.events.Emit("service:domain:added", id, domain)
+			defer s.events.Emit("service:domain:added", id, domain)
 		}
 	} else {
 		logger.Warningf("Service '%s' ignored: No IP provided:", id, id)
@@ -109,13 +108,13 @@ func (s *DNSServer) RemoveService(id string) error {
 
 	for domain := range s.services[id].ListDomains(s.config.Domain.String(), true) {
 		s.mux.HandleRemove(domain)
-		<-s.events.Emit("service:domain:removed", id, domain)
+		defer s.events.Emit("service:domain:removed", id, domain)
 	}
 
 	delete(s.services, id)
 
 	logger.Debugf("Removed service '%s'", id)
-	<-s.events.Emit("service:removed", id)
+	defer s.events.Emit("service:removed", id)
 
 	return nil
 }

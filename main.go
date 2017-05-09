@@ -49,7 +49,18 @@ func main() {
 	}
 
 	events := &emitter.Emitter{}
-	events.Use("*", emitter.Sync)
+	//events.Use("*", emitter.Sync)
+	//events.Use("*", emitter.Void)
+
+	go func() {
+		for event := range events.On("*") {
+			logger.Debugf("Event: %s", event)
+		}
+	}()
+
+	//events.On("*", func(event *emitter.Event) {
+	//    logger.Debugf("Event: %s", event)
+	//})
 
 	dnsServer := servers.NewDNSServer(config, events)
 

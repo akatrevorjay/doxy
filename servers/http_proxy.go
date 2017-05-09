@@ -195,12 +195,46 @@ func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider, events *emitt
 			}
 		})
 
+	go func(){
+		for event := range events.On("service:domain:added") {
+			id := event.String(0)
+			domain := event.String(1)
+
+			logger.Debugf("Adding http service='%s' domain='%s'", id, domain)
+
+			//service, err := s.list.GetService(id)
+			//if err != nil {
+			//    s.AddProxyDomain(domain, &service)
+			//}
+		}
+	}()
+
+	go func(){
+		for event := range events.On("service:domain:removed") {
+			id := event.String(0)
+			domain := event.String(1)
+
+			logger.Debugf("Removing http service='%s' domain='%s'", id, domain)
+
+			//service, err := s.list.GetService(id)
+			//if err != nil {
+			//    s.RemoveProxyDomain(domain, &service)
+			//}
+		}
+	}()
+
 	s.server = proxy
 	return s
 }
 
 // AddProxyDomain Adds a proxy domain
-func (s *ProxyHttpServer) AddProxyDomain(domain string, service Service) {
+func (s *ProxyHttpServer) AddProxyDomain(domain string, service *Service) {
+	logger.Debugf("Adding domain='%s' to proxy", domain)
+}
+
+// AddProxyDomain Adds a proxy domain
+func (s *ProxyHttpServer) RemoveProxyDomain(domain string, service *Service) {
+	logger.Debugf("Removing domain='%s' from proxy", domain)
 }
 
 // Start starts the http endpoints
