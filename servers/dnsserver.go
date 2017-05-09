@@ -76,21 +76,28 @@ func (s *DNSServer) AddService(id string, service Service) {
 	}
 
 	if len(service.IPs) > 0 {
-		defer s.lock.Unlock()
-		s.lock.Lock()
-
 		id = s.getExpandedID(id)
-		s.services[id] = &service
 
-		logger.Debugf(`Added service: '%s'
-                      %s`, id, service)
-		defer s.events.Emit("service:added", id)
+		func() {
+			defer s.lock.Unlock()
+			s.lock.Lock()
 
-		for domain := range service.ListDomains(s.config.Domain.String(), true) {
-			logger.Debugf("Handling DNS requests for domain='%s'.", domain)
-			s.mux.HandleFunc(domain, s.handleRequest)
-			defer s.events.Emit("service:domain:added", id, domain)
-		}
+			logger.Debugf("Adding service id='%s' %s", id, service)
+
+			s.services[id] = &service
+
+			defer s.events.Emit("service:added", id)
+		}()
+
+		func() {
+			for domain := range service.ListDomains(s.config.Domain.String(), true) {
+				logger.Debugf("Adding service=%s DNS domain='%s'.", service.Name, domain)
+
+				s.mux.HandleFunc(domain, s.handleRequest)
+
+				defer s.events.Emit("service:domain:added", id, domain)
+			}
+		}()
 	} else {
 		logger.Warningf("Service '%s' ignored: No IP provided:", id, id)
 	}
@@ -102,18 +109,23 @@ func (s *DNSServer) RemoveService(id string) error {
 	s.lock.Lock()
 
 	id = s.getExpandedID(id)
-	if _, ok := s.services[id]; !ok {
+	service, err := s.GetService(id)
+	if err != nil {
 		return errors.New("No such service: " + id)
 	}
 
-	for domain := range s.services[id].ListDomains(s.config.Domain.String(), true) {
+	logger.Debugf("Removing service id='%s' name='%s'", id, service.Name)
+
+	for domain := range service.ListDomains(s.config.Domain.String(), true) {
+		logger.Debugf("Removing service='%s' DNS domain='%s'", service.Name, domain)
+
 		s.mux.HandleRemove(domain)
+
 		defer s.events.Emit("service:domain:removed", id, domain)
 	}
 
 	delete(s.services, id)
 
-	logger.Debugf("Removed service '%s'", id)
 	defer s.events.Emit("service:removed", id)
 
 	return nil
