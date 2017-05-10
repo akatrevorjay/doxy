@@ -10,65 +10,13 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strings"
 
 	"github.com/akatrevorjay/doxyroxy/utils"
 	"github.com/elazarl/goproxy"
 	vhost "github.com/inconshreveable/go-vhost"
 	"github.com/olebedev/emitter"
 )
-
-// TODO Generate this on startup if it's non-existent (file)
-
-var caCert = []byte(`-----BEGIN CERTIFICATE-----
-MIIDkzCCAnugAwIBAgIJAKe/ZGdfcHdPMA0GCSqGSIb3DQEBCwUAMGAxCzAJBgNV
-BAYTAkFVMRMwEQYDVQQIDApTb21lLVN0YXRlMSEwHwYDVQQKDBhJbnRlcm5ldCBX
-aWRnaXRzIFB0eSBMdGQxGTAXBgNVBAMMEGRlbW8gZm9yIGdvcHJveHkwHhcNMTYw
-OTI3MTQzNzQ3WhcNMTkwOTI3MTQzNzQ3WjBgMQswCQYDVQQGEwJBVTETMBEGA1UE
-CAwKU29tZS1TdGF0ZTEhMB8GA1UECgwYSW50ZXJuZXQgV2lkZ2l0cyBQdHkgTHRk
-MRkwFwYDVQQDDBBkZW1vIGZvciBnb3Byb3h5MIIBIjANBgkqhkiG9w0BAQEFAAOC
-AQ8AMIIBCgKCAQEA2+W48YZoch72zj0a+ZlyFVY2q2MWmqsEY9f/u53fAeTxvPE6
-1/DnqsydnA3FnGvxw9Dz0oZO6xG+PZvp+lhN07NZbuXK1nie8IpxCa342axpu4C0
-69lZwxikpGyJO4IL5ywp/qfb5a2DxPTAyQOQ8ROAaydoEmktRp25yicnQ2yeZW//
-1SIQxt7gRxQIGmuOQ/Gqr/XN/z2cZdbGJVRUvQXk7N6NhQiCX1zlmp1hzUW9jwC+
-JEKKF1XVpQbc94Bo5supxhkKJ70CREPy8TH9mAUcQUZQRohnPvvt/lKneYAGhjHK
-vhpajwlbMMSocVXFvY7o/IqIE/+ZUeQTs1SUwQIDAQABo1AwTjAdBgNVHQ4EFgQU
-GnlWcIbfsWJW7GId+6xZIK8YlFEwHwYDVR0jBBgwFoAUGnlWcIbfsWJW7GId+6xZ
-IK8YlFEwDAYDVR0TBAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAoFUjSD15rKlY
-xudzyVlr6n0fRNhITkiZMX3JlFOvtHNYif8RfK4TH/oHNBTmle69AgixjMgy8GGd
-H90prytGQ5zCs1tKcCFsN5gRSgdAkc2PpRFOK6u8HwOITV5lV7sjucsddXJcOJbQ
-4fyVe47V9TTxI+A7lRnUP2HYTR1Bd0R/IgRAH57d1ZHs7omHIuQ+Ea8ph2ppXMnP
-DXVOlZ9zfczSnPnQoomqULOU9Fq2ycyi8Y/ROtAHP6O7wCFbYHXhxojdaHSdhkcd
-troTflFMD2/4O6MtBKbHxSmEG6H0FBYz5xUZhZq7WUH24V3xYsfge29/lOCd5/Xf
-A+j0RJc/lQ==
------END CERTIFICATE-----`)
-
-var caKey = []byte(`-----BEGIN RSA PRIVATE KEY-----
-MIIEowIBAAKCAQEA2+W48YZoch72zj0a+ZlyFVY2q2MWmqsEY9f/u53fAeTxvPE6
-1/DnqsydnA3FnGvxw9Dz0oZO6xG+PZvp+lhN07NZbuXK1nie8IpxCa342axpu4C0
-69lZwxikpGyJO4IL5ywp/qfb5a2DxPTAyQOQ8ROAaydoEmktRp25yicnQ2yeZW//
-1SIQxt7gRxQIGmuOQ/Gqr/XN/z2cZdbGJVRUvQXk7N6NhQiCX1zlmp1hzUW9jwC+
-JEKKF1XVpQbc94Bo5supxhkKJ70CREPy8TH9mAUcQUZQRohnPvvt/lKneYAGhjHK
-vhpajwlbMMSocVXFvY7o/IqIE/+ZUeQTs1SUwQIDAQABAoIBAHK94ww8W0G5QIWL
-Qwkc9XeGvg4eLUxVknva2Ll4fkZJxY4WveKx9OCd1lv4n7WoacYIwUGIDaQBZShW
-s/eKnkmqGy+PvpC87gqL4sHvQpuqqJ1LYpxylLEFqduWOuGPUVC2Lc+QnWCycsCS
-CgqZzsbMq0S+kkKRGSvw32JJneZCzqLgLNssQNVk+Gm6SI3s4jJsGPesjhnvoPaa
-xZK14uFpltaA05GSTDaQeZJFEdnnb3f/eNPc2xMEfi0S2ZlJ6Q92WJEOepAetDlR
-cRFi004bNyTb4Bphg8s4+9Cti5is199aFkGCRDWxeqEnc6aMY3Ezu9Qg3uttLVUd
-uy830GUCgYEA7qS0X+9UH1R02L3aoANyADVbFt2ZpUwQGauw9WM92pH52xeHAw1S
-ohus6FI3OC8xQq2CN525tGLUbFDZnNZ3YQHqFsfgevfnTs1//gbKXomitev0oFKh
-VT+WYS4lkgYtPlXzhdGuk32q99T/wIocAguvCUY3PiA7yBz93ReyausCgYEA6+P8
-bugMqT8qjoiz1q/YCfxsw9bAGWjlVqme2xmp256AKtxvCf1BPsToAaJU3nFi3vkw
-ICLxUWAYoMBODJ3YnbOsIZOavdXZwYHv54JqwqFealC3DG0Du6fZYZdiY8pK+E6m
-3fiYzP1WoVK5tU4bH8ibuIQvpcI8j7Gy0cV6/AMCgYBHl7fZNAZro72uLD7DVGVF
-9LvP/0kR0uDdoqli5JPw12w6szM40i1hHqZfyBJy042WsFDpeHL2z9Nkb1jpeVm1
-C4r7rJkGqwqElJf6UHUzqVzb8N6hnkhyN7JYkyyIQzwdgFGfaslRzBiXYxoa3BQM
-9Q5c3OjDxY3JuhDa3DoVYwKBgDNqrWJLSD832oHZAEIicBe1IswJKjQfriWWsV6W
-mHSbdtpg0/88aZVR/DQm+xLFakSp0jifBTS0momngRu06Dtvp2xmLQuF6oIIXY97
-2ON1owvPbibSOEcWDgb8pWCU/oRjOHIXts6vxctCKeKAFN93raGphm0+Ck9T72NU
-BTubAoGBAMEhI/Wy9wAETuXwN84AhmPdQsyCyp37YKt2ZKaqu37x9v2iL8JTbPEz
-pdBzkA2Gc0Wdb6ekIzRrTsJQl+c/0m9byFHsRsxXW2HnezfOFX1H4qAmF6KWP0ub
-M8aIn6Rab4sNPSrvKGrU6rFpv/6M33eegzldVnV9ku6uPJI1fFTC
------END RSA PRIVATE KEY-----`)
 
 func orPanic(err error) {
 	if err != nil {
@@ -155,8 +103,10 @@ func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider, events *emitt
 				client.Close()
 			}()
 			clientBuf := bufio.NewReadWriter(bufio.NewReader(client), bufio.NewWriter(client))
+
 			remote, err := connectDial(proxy, "tcp", req.URL.Host)
 			orPanic(err)
+
 			remoteBuf := bufio.NewReadWriter(bufio.NewReader(remote), bufio.NewWriter(remote))
 			for {
 				req, err := http.ReadRequest(clientBuf.Reader)
@@ -180,8 +130,16 @@ func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider, events *emitt
 				client.Close()
 			}()
 			clientBuf := bufio.NewReadWriter(bufio.NewReader(client), bufio.NewWriter(client))
-			remote, err := connectDial(proxy, "tcp", req.URL.Host)
+
+			host, port, err := net.SplitHostPort(req.URL.Host)
+			if err != nil {
+				host, port = req.URL.Host, "80"
+			}
+			remoteHostport := fmt.Sprintf("%s:%s", host, port)
+
+			remote, err := connectDial(proxy, "tcp", remoteHostport)
 			orPanic(err)
+
 			remoteBuf := bufio.NewReadWriter(bufio.NewReader(remote), bufio.NewWriter(remote))
 			for {
 				req, err := http.ReadRequest(clientBuf.Reader)
@@ -196,30 +154,21 @@ func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider, events *emitt
 		})
 
 	go func(){
-		for event := range events.On("service:domain:added") {
-			id := event.String(0)
-			domain := event.String(1)
+		for event := range events.On("service:domain:*") {
+			top_base := utils.Reverse(strings.Split(event.OriginalTopic, ":"))[0]
 
-			logger.Debugf("Adding http service='%s' domain='%s'", id, domain)
+			switch {
+			case top_base == "added" || top_base == "removed":
+				id := event.String(0)
+				domain := event.String(1)
+				logger.Debugf("http event: base=%s id=%s domain=%s", top_base, id, domain)
 
-			//service, err := s.list.GetService(id)
-			//if err != nil {
-			//    s.AddProxyDomain(domain, &service)
-			//}
-		}
-	}()
-
-	go func(){
-		for event := range events.On("service:domain:removed") {
-			id := event.String(0)
-			domain := event.String(1)
-
-			logger.Debugf("Removing http service='%s' domain='%s'", id, domain)
-
-			//service, err := s.list.GetService(id)
-			//if err != nil {
-			//    s.RemoveProxyDomain(domain, &service)
-			//}
+				if top_base == "added" {
+					go s.AddProxyDomain(id, domain)
+				} else if top_base == "removed" {
+					go s.RemoveProxyDomain(id, domain)
+				}
+			}
 		}
 	}()
 
@@ -228,39 +177,50 @@ func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider, events *emitt
 }
 
 // AddProxyDomain Adds a proxy domain
-func (s *ProxyHttpServer) AddProxyDomain(domain string, service *Service) {
-	logger.Debugf("Adding domain='%s' to proxy", domain)
+func (s *ProxyHttpServer) AddProxyDomain(id string, domain string) {
+	logger.Debugf("Adding http service='%s' domain='%s'", id, domain)
+
+	service, err := s.list.GetService(id)
+	if err != nil {
+		logger.Debugf("Adding HTTP for service='%s' domain='%s'", service.Name, domain)
+	}
 }
 
 // AddProxyDomain Adds a proxy domain
-func (s *ProxyHttpServer) RemoveProxyDomain(domain string, service *Service) {
-	logger.Debugf("Removing domain='%s' from proxy", domain)
+func (s *ProxyHttpServer) RemoveProxyDomain(id string, domain string) {
+	logger.Debugf("Removing http service='%s' domain='%s'", id, domain)
+
+	service, err := s.list.GetService(id)
+	if err != nil {
+		logger.Debugf("Removing HTTP for service='%s' domain='%s'", service.Name, domain)
+	}
 }
 
 // Start starts the http endpoints
 func (s *ProxyHttpServer) Start() error {
-	logger.Infof("Server starting up! - configured to listen on http interface %s and https interface %s", s.config.HttpAddr, s.config.HttpsAddr)
-
-	// listen to the TLS ClientHello but make it a CONNECT request instead
-	ln, err := net.Listen("tcp", s.config.HttpsAddr)
-	if err != nil {
-		logger.Fatalf("Error listening for https connections - %v", err)
-	}
+	logger.Infof("Starting ProxyHttpServer; listening on http=%s https=%s.", s.config.HttpAddr, s.config.HttpsAddr)
 
 	go func() {
+		// listen to the TLS ClientHello but make it a CONNECT request instead
+		ln, err := net.Listen("tcp", s.config.HttpsAddr)
+		if err != nil {
+			logger.Fatalf("Error listening for https connections - %v", err)
+		}
+
 		for {
 			c, err := ln.Accept()
 			if err != nil {
-				logger.Infof("Error accepting new connection - %v", err)
+				logger.Errorf("Error accepting new connection - %v", err)
 				continue
 			}
+
 			go func(c net.Conn) {
 				tlsConn, err := vhost.TLS(c)
 				if err != nil {
-					logger.Infof("Error accepting new connection - %v", err)
+					logger.Errorf("Error accepting new connection - %v", err)
 				}
 				if tlsConn.Host() == "" {
-					logger.Infof("Cannot support non-SNI enabled clients")
+					logger.Errorf("Cannot support non-SNI enabled clients")
 					return
 				}
 
@@ -280,11 +240,12 @@ func (s *ProxyHttpServer) Start() error {
 		}
 	}()
 
-	err = http.ListenAndServe(s.config.HttpAddr, s.server)
+	err := http.ListenAndServe(s.config.HttpAddr, s.server)
 	if err != nil {
-		logger.Fatalf("Error listening for https connections - %v", err)
+		logger.Fatalf("Error listening for http connections - %v", err)
 	}
-	return err
+
+	return nil
 }
 
 // copied/converted from https.go

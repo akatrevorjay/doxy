@@ -10,32 +10,27 @@ package utils
 
 import (
 	"github.com/op/go-logging"
-	"io/ioutil"
 	"os"
 )
 
 // InitLoggers initialize loggers
 func InitLoggers(verbosity int) (err error) {
-	var format logging.Formatter
+	var format = logging.MustStringFormatter(
+		`%{color}%{time:15:04:05.000} %{longfunc}: %{color:bold}%{message} %{color:reset}%{color}@%{shortfile} %{color}#%{level}%{color:reset}`,
+	)
 
-	var backend logging.Backend
-
-	switch {
-	case verbosity == 0:
-		backend = logging.NewLogBackend(ioutil.Discard, "", 0)
-	case verbosity >= 1:
-		backend = logging.NewLogBackend(os.Stdout, "", 0)
-	}
-
-	format = logging.MustStringFormatter(`%{color}%{time:15:04:05.000} | %{level:.10s} ▶%{color:reset} %{message}`)
-
+	backend := logging.NewLogBackend(os.Stderr, "", 0)
 	formatter := logging.NewBackendFormatter(backend, format)
+	//logging.SetBackend(formatter)
+
 	leveledBackend := logging.AddModuleLevel(formatter)
 
 	switch {
 	case verbosity == 1:
+		logging.SetLevel(logging.INFO, "")
 		leveledBackend.SetLevel(logging.INFO, "")
 	case verbosity >= 2:
+		logging.SetLevel(logging.DEBUG, "")
 		leveledBackend.SetLevel(logging.DEBUG, "")
 	}
 

@@ -43,7 +43,7 @@ func NewDNSServer(c *utils.Config, events *emitter.Emitter) *DNSServer {
 		events:	  events,
 	}
 
-	logger.Debugf("Handling DNS requests for '%s'.", c.Domain.String())
+	logger.Debugf("DNS root domain='%s'", c.Domain.String())
 
 	s.mux = dns.NewServeMux()
 	s.mux.HandleFunc(c.Domain.String()+".", s.handleRequest)
@@ -57,7 +57,16 @@ func NewDNSServer(c *utils.Config, events *emitter.Emitter) *DNSServer {
 
 // Start starts the DNSServer
 func (s *DNSServer) Start() error {
-	return s.server.ListenAndServe()
+	logger.Infof("Starting DNSServer; listening on %s", s.config.DnsAddr)
+
+	go func() {
+		err := s.server.ListenAndServe()
+		if err != nil {
+			logger.Fatalf("Error listening for DNS connections - %v", err)
+		}
+	}()
+
+	return nil
 }
 
 // Stop stops the DNSServer
@@ -78,26 +87,22 @@ func (s *DNSServer) AddService(id string, service Service) {
 	if len(service.IPs) > 0 {
 		id = s.getExpandedID(id)
 
-		func() {
-			defer s.lock.Unlock()
-			s.lock.Lock()
+		defer s.lock.Unlock()
+		s.lock.Lock()
 
-			logger.Debugf("Adding service id='%s' %s", id, service)
+		logger.Debugf("Adding service id='%s' %s", id, service)
 
-			s.services[id] = &service
+		s.services[id] = &service
 
-			defer s.events.Emit("service:added", id)
-		}()
+		defer s.events.Emit("service:added", id)
 
-		func() {
-			for domain := range service.ListDomains(s.config.Domain.String(), true) {
-				logger.Debugf("Adding service=%s DNS domain='%s'.", service.Name, domain)
+		for domain := range service.ListDomains(s.config.Domain.String(), true) {
+			logger.Debugf("Adding service=%s DNS domain='%s'.", service.Name, domain)
 
-				s.mux.HandleFunc(domain, s.handleRequest)
+			s.mux.HandleFunc(domain, s.handleRequest)
 
-				defer s.events.Emit("service:domain:added", id, domain)
-			}
-		}()
+			defer s.events.Emit("service:domain:added", id, domain)
+		}
 	} else {
 		logger.Warningf("Service '%s' ignored: No IP provided:", id, id)
 	}
@@ -359,7 +364,7 @@ func (s *DNSServer) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 
 	logger.Debugf("DNS request for query '%s' from remote '%s'", query, w.RemoteAddr())
 
-	for service := range s.queryServices(query) {
+	for service := range s.QueryServices(query) {
 		var rr dns.RR
 		switch r.Question[0].Qtype {
 		case dns.TypeA:
@@ -488,7 +493,8 @@ func (s *Service) hasPrefixMatch(query string, suffix string) string {
 	return ""
 }
 
-func (s *DNSServer) queryServices(query string) chan *Service {
+// QueryServices queries services
+func (s *DNSServer) QueryServices(query string) chan *Service {
 	c := make(chan *Service, 3)
 
 	go func() {

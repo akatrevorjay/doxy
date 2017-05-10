@@ -48,6 +48,8 @@ func main() {
 		logger.Fatalf("Unable to initialize loggers! %s", err.Error())
 	}
 
+	logger.Infof("Init")
+
 	events := &emitter.Emitter{}
 	//events.Use("*", emitter.Sync)
 	//events.Use("*", emitter.Void)
@@ -59,10 +61,11 @@ func main() {
 	}()
 
 	//events.On("*", func(event *emitter.Event) {
-	//    logger.Debugf("Event: %s", event)
+	//    logger.Debugf("Event2: %s", event)
 	//})
 
 	dnsServer := servers.NewDNSServer(config, events)
+	httpProxyServer := servers.NewHTTPProxyServer(config, dnsServer, events)
 
 	var tlsConfig *tls.Config
 	if config.TlsVerify {
@@ -88,18 +91,16 @@ func main() {
 	if err != nil {
 		logger.Fatalf("Error: '%s'", err)
 	}
+
+	if err := dnsServer.Start(); err != nil {
+		logger.Fatalf("Error: '%s'", err)
+	}
+
 	if err := docker.Start(); err != nil {
 		logger.Fatalf("Error: '%s'", err)
 	}
 
-	httpProxyServer := servers.NewHTTPProxyServer(config, dnsServer, events)
-	go func() {
-		if err := httpProxyServer.Start(); err != nil {
-			logger.Fatalf("Error: '%s'", err)
-		}
-	}()
-
-	if err := dnsServer.Start(); err != nil {
+	if err := httpProxyServer.Start(); err != nil {
 		logger.Fatalf("Error: '%s'", err)
 	}
 }

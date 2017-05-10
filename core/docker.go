@@ -19,6 +19,8 @@ import (
 
 	"github.com/akatrevorjay/doxyroxy/servers"
 	"github.com/akatrevorjay/doxyroxy/utils"
+	//"github.com/docker/docker/api/types"
+	//"github.com/docker/docker/client"
 	"github.com/docker/engine-api/client"
 	"github.com/docker/engine-api/types"
 	eventtypes "github.com/docker/engine-api/types/events"
@@ -39,7 +41,7 @@ type DockerManager struct {
 // NewDockerManager creates a new DockerManager
 func NewDockerManager(c *utils.Config, list servers.ServiceListProvider, tlsConfig *tls.Config, events *emitter.Emitter) (*DockerManager, error) {
 	defaultHeaders := map[string]string{"User-Agent": "engine-api-cli-1.0"}
-	dclient, err := client.NewClient(c.DockerHost, "v1.22", nil, defaultHeaders)
+	dclient, err := client.NewClient(c.DockerHost, "v1.23", nil, defaultHeaders)
 
 	if err != nil {
 		return nil, err
@@ -80,7 +82,7 @@ func (d *DockerManager) Start() error {
 		oldName, ok := m.Actor.Attributes["oldName"]
 		name, ok2 := m.Actor.Attributes["oldName"]
 		if ok && ok2 {
-			logger.Debugf("Renamed container '%s' into '%s'", oldName, name)
+			logger.Debugf("Renamed container '%s' => '%s'", oldName, name)
 			<-d.events.Emit("container:renamed", m.ID, oldName, name)
 
 			d.list.RemoveService(oldName)
@@ -97,6 +99,7 @@ func (d *DockerManager) Start() error {
 	destroyHandler := func(m eventtypes.Message) {
 		logger.Debugf("Destroyed container '%s'", m.ID)
 		<-d.events.Emit("container:destroyed", m.ID)
+
 		if d.config.All {
 			d.list.RemoveService(m.ID)
 		}
@@ -111,6 +114,8 @@ func (d *DockerManager) Start() error {
 	eventHandler.Handle("rename", renameHandler)
 
 	events.MonitorWithHandler(ctx, d.client, types.EventsOptions{}, eventHandler)
+
+	logger.Infof("Adding pre-existing containers")
 
 	containers, err := d.client.ContainerList(context.Background(), types.ContainerListOptions{})
 	if err != nil {
