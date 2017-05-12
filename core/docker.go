@@ -24,9 +24,9 @@ import (
 	"github.com/docker/engine-api/client"
 	"github.com/docker/engine-api/types"
 	eventtypes "github.com/docker/engine-api/types/events"
+	"github.com/olebedev/emitter"
 	"github.com/vdemeester/docker-events"
 	"golang.org/x/net/context"
-	"github.com/olebedev/emitter"
 )
 
 // DckerManager is the entrypoint to the docker daemon
@@ -57,19 +57,23 @@ func (d *DockerManager) Start() error {
 
 	startHandler := func(m eventtypes.Message) {
 		logger.Debugf("Started container '%s'", m.ID)
-		<-d.events.Emit("container:started", m.ID)
+		d.events.Emit("container:started", m.ID)
 
 		service, err := d.getService(m.ID)
 		if err != nil {
 			logger.Errorf("%s", err)
-		} else {
-			d.list.AddService(m.ID, *service)
+			return
+		}
+
+		err = d.list.AddService(m.ID, *service)
+		if err != nil {
+			logger.Errorf("Failed to add service id=%s: %s", m.ID, err)
 		}
 	}
 
 	stopHandler := func(m eventtypes.Message) {
 		logger.Debugf("Stopped container '%s'", m.ID)
-		<-d.events.Emit("container:stopped", m.ID)
+		d.events.Emit("container:stopped", m.ID)
 
 		if d.config.All {
 			logger.Debugf("Stopped container '%s' not removed as --all argument is true", m.ID)
@@ -87,7 +91,7 @@ func (d *DockerManager) Start() error {
 		name, ok2 := m.Actor.Attributes["oldName"]
 		if ok && ok2 {
 			logger.Debugf("Renamed container '%s' => '%s'", oldName, name)
-			<-d.events.Emit("container:renamed", m.ID, oldName, name)
+			d.events.Emit("container:renamed", m.ID, oldName, name)
 
 			err := d.list.RemoveService(oldName)
 			if err != nil {
@@ -109,10 +113,13 @@ func (d *DockerManager) Start() error {
 
 	destroyHandler := func(m eventtypes.Message) {
 		logger.Debugf("Destroyed container '%s'", m.ID)
-		<-d.events.Emit("container:destroyed", m.ID)
+		d.events.Emit("container:destroyed", m.ID)
 
 		if d.config.All {
-			d.list.RemoveService(m.ID)
+			err := d.list.RemoveService(m.ID)
+			if err != nil {
+				logger.Errorf("Failed to remove service id=%s: %s", m.ID, err)
+			}
 		}
 	}
 
