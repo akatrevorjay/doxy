@@ -32,6 +32,7 @@ type DNSServer struct {
 	services map[string]*Service
 	lock     *sync.RWMutex
 	events   *emitter.Emitter
+	client   *dns.Client
 }
 
 // NewDNSServer create a new DNSServer
@@ -40,14 +41,21 @@ func NewDNSServer(c *utils.Config, events *emitter.Emitter) *DNSServer {
 		config:   c,
 		services: make(map[string]*Service),
 		lock:     &sync.RWMutex{},
-		events:	  events,
+		events:   events,
+		client:   &dns.Client{},
 	}
 
-	logger.Debugf("DNS root domain='%s'", c.Domain.String())
+	// Suppress multiple outstanding queries (with the same question, type and class)
+	s.client.SingleInflight = true
+
+	//s.clientLoadResolvconf()
 
 	s.mux = dns.NewServeMux()
+
 	s.mux.HandleFunc(c.Domain.String()+".", s.handleRequest)
 	s.mux.HandleFunc("in-addr.arpa.", s.handleReverseRequest)
+
+	// Catchall
 	s.mux.HandleFunc(".", s.handleForward)
 
 	s.server = &dns.Server{Addr: c.DnsAddr, Net: "udp", Handler: s.mux}
@@ -55,9 +63,21 @@ func NewDNSServer(c *utils.Config, events *emitter.Emitter) *DNSServer {
 	return s
 }
 
+func (s *DNSServer) clientLoadResolvconf() {
+	resolvconf_path := "/etc/resolv.conf"
+	cc, err := dns.ClientConfigFromFile(resolvconf_path)
+	if err != nil {
+		logger.Errorf("error parsing resolv.conf: %v", err)
+	}
+
+	if len(cc.Servers) > 0 {
+		logger.Infof("Loaded %d upstream DNS servers from '%s': %s", len(cc.Servers), resolvconf_path, cc.Servers)
+	}
+}
+
 // Start starts the DNSServer
 func (s *DNSServer) Start() error {
-	logger.Infof("Starting DNSServer; listening on %s", s.config.DnsAddr)
+	logger.Infof("Starting DNS service; domain='%s' listening on %s/tcp+udp", s.config.Domain.String(), s.config.DnsAddr)
 
 	go func() {
 		err := s.server.ListenAndServe()
@@ -79,33 +99,36 @@ func (s *DNSServer) getServicePrimary(svc Service) string {
 }
 
 // AddService adds a new container and thus new DNS records
-func (s *DNSServer) AddService(id string, service Service) {
+func (s *DNSServer) AddService(id string, service Service) error {
 	if len(service.Primary) == 0 {
 		service.Primary = s.getServicePrimary(service)
 	}
 
-	if len(service.IPs) > 0 {
-		id = s.getExpandedID(id)
-
-		defer s.lock.Unlock()
-		s.lock.Lock()
-
-		logger.Debugf("Adding service id='%s' %s", id, service)
-
-		s.services[id] = &service
-
-		defer s.events.Emit("service:added", id)
-
-		for domain := range service.ListDomains(s.config.Domain.String(), true) {
-			logger.Debugf("Adding service=%s DNS domain='%s'.", service.Name, domain)
-
-			s.mux.HandleFunc(domain, s.handleRequest)
-
-			defer s.events.Emit("service:domain:added", id, domain)
-		}
-	} else {
+	if len(service.IPs) == 0 {
 		logger.Warningf("Service '%s' ignored: No IP provided:", id, id)
+		return nil
 	}
+
+	id = s.getExpandedID(id)
+
+	defer s.lock.Unlock()
+	s.lock.Lock()
+
+	logger.Infof("Adding DNS service=%s id=%s", service.Name, id)
+
+	s.services[id] = &service
+
+	defer s.events.Emit("service:added", id)
+
+	for domain := range service.ListDomains(s.config.Domain.String(), true) {
+		logger.Debugf("Adding DNS domain=%s service=%s", domain, service.Name)
+
+		s.mux.HandleFunc(domain, s.handleRequest)
+
+		defer s.events.Emit("service:domain:added", id, domain)
+	}
+
+	return nil
 }
 
 // RemoveService removes a new container and thus DNS records
@@ -223,18 +246,13 @@ func (service *Service) ListDomains(suffix string, end bool) chan string {
 }
 
 func (s *DNSServer) handleForward(w dns.ResponseWriter, r *dns.Msg) {
-
-	logger.Debugf("Using DNS forwarding for '%s'", r.Question[0].Name)
-	logger.Debugf("Forwarding DNS nameservers: %s", s.config.Nameservers.String())
-
-	// Otherwise just forward the request to another server
-	c := new(dns.Client)
+	domain := r.Question[0].Name
 
 	// look at each Nameserver, stop on success
-	for i := range s.config.Nameservers {
-		logger.Debugf("Using Nameserver %s", s.config.Nameservers[i])
+	for _, nameserver := range s.config.Nameservers {
+		logger.Debugf("Forwarding DNS request for domain='%s' to nameserver='%s'", domain, nameserver)
 
-		in, _, err := c.Exchange(r, s.config.Nameservers[i])
+		in, _, err := s.client.Exchange(r, nameserver)
 		if err == nil {
 			if s.config.ForceTtl {
 				logger.Debugf("Forcing Ttl value of the forwarded response")
@@ -245,21 +263,10 @@ func (s *DNSServer) handleForward(w dns.ResponseWriter, r *dns.Msg) {
 			w.WriteMsg(in)
 			return
 		}
-
-		if i == (len(s.config.Nameservers) - 1) {
-			logger.Warningf("DNS fowarding failed: no more nameservers to try")
-
-			// Send failure reply
-			m := new(dns.Msg)
-			m.SetReply(r)
-			m.Ns = s.createSOA()
-			m.SetRcode(r, dns.RcodeRefused) // REFUSED
-			w.WriteMsg(m)
-
-		} else {
-			logger.Debugf("DNS fowarding failed: trying next Nameserver...")
-		}
 	}
+
+	// Fail
+	dns.HandleFailed(w, r)
 }
 
 func (s *DNSServer) makeServiceA(n string, service *Service) dns.RR {
@@ -460,7 +467,7 @@ func (s *DNSServer) handleReverseRequest(w dns.ResponseWriter, r *dns.Msg) {
 func (s *DNSServer) queryIP(query string) chan *Service {
 	c := make(chan *Service, 3)
 	reversedIP := strings.TrimSuffix(query, ".in-addr.arpa")
-	ip := strings.Join(utils.Reverse(strings.Split(reversedIP, ".")), ".")
+	ip := strings.Join(utils.Reverse(dns.SplitDomainName(reversedIP)), ".")
 
 	go func() {
 		defer s.lock.RUnlock()
@@ -480,12 +487,12 @@ func (s *DNSServer) queryIP(query string) chan *Service {
 
 func (s *Service) hasPrefixMatch(query string, suffix string) string {
 	utils.Dump(query)
-	squery := utils.DomainSplit(query)
+	squery := dns.SplitDomainName(query)
 
 	for domain := range s.ListDomains(suffix, false) {
 		utils.Dump(domain)
 
-		sdomain := utils.DomainSplit(domain)
+		sdomain := dns.SplitDomainName(domain)
 		if isPrefixQuery(squery, sdomain) {
 			return domain
 		}

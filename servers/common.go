@@ -32,7 +32,7 @@ func (s Service) String() string {
 
 // ServiceListProvider represents the entrypoint to get containers
 type ServiceListProvider interface {
-	AddService(string, Service)
+	AddService(string, Service) error
 	RemoveService(string) error
 	GetService(string) (Service, error)
 	GetAllServices() map[string]Service

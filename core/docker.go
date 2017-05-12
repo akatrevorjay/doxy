@@ -71,10 +71,14 @@ func (d *DockerManager) Start() error {
 		logger.Debugf("Stopped container '%s'", m.ID)
 		<-d.events.Emit("container:stopped", m.ID)
 
-		if !d.config.All {
-			d.list.RemoveService(m.ID)
-		} else {
+		if d.config.All {
 			logger.Debugf("Stopped container '%s' not removed as --all argument is true", m.ID)
+			return
+		}
+
+		err := d.list.RemoveService(m.ID)
+		if err != nil {
+			logger.Errorf("Failed to remove service id=%s: %s", m.ID, err)
 		}
 	}
 
@@ -85,13 +89,20 @@ func (d *DockerManager) Start() error {
 			logger.Debugf("Renamed container '%s' => '%s'", oldName, name)
 			<-d.events.Emit("container:renamed", m.ID, oldName, name)
 
-			d.list.RemoveService(oldName)
+			err := d.list.RemoveService(oldName)
+			if err != nil {
+				logger.Errorf("Failed to remove service id=%s: %s", m.ID, err)
+			}
 
 			service, err := d.getService(m.ID)
 			if err != nil {
-				logger.Errorf("%s", err)
-			} else {
-				d.list.AddService(m.ID, *service)
+				logger.Errorf("Failed to get service id=%s: %s", m.ID, err)
+				return
+			}
+
+			err = d.list.AddService(m.ID, *service)
+			if err != nil {
+				logger.Errorf("Failed to add service id=%s: %s", m.ID, err)
 			}
 		}
 	}
@@ -128,7 +139,11 @@ func (d *DockerManager) Start() error {
 			logger.Errorf("%s", err)
 			continue
 		}
-		d.list.AddService(container.ID, *service)
+
+		err = d.list.AddService(container.ID, *service)
+		if err != nil {
+			logger.Errorf("Failed to add service id=%s: %s", container.ID, err)
+		}
 	}
 
 	return nil

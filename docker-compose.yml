@@ -5,12 +5,29 @@ services:
     build: .
     hostname: doxyroxy
     container_name: doxyroxy
-    command: doxyroxy --alias --verbose
+    command: doxyroxy -D :53 -H :80 -I :443
+    #restart: always
+    userns_mode: host
+
+    volumes:
+      - .:/go/src/github.com/akatrevorjay/doxyroxy
+      - /var/run/docker.sock:/run/docker.sock
+
+    networks:
+      - doxyroxy
+
+    #healthcheck:
+    #  test: ["CMD", "curl", "-f", "http://localhost"]
+    #  interval: 1m30s
+    #  timeout: 10s
+    #  retries: 3
+
     expose:
-      - 8053/udp
-      - 8053/tcp
-      - 8080/tcp
-      - 8443/tcp
+      - 53/udp
+      - 53/tcp
+      - 80/tcp
+      - 443/tcp
+
     #ports:
       #- 53:8053/udp
       #- 53:8053/tcp
@@ -22,16 +39,6 @@ services:
       #- 10.69.69.2:53:53/tcp
       #- 10.69.69.2:80:80/tcp
       #- 10.69.69.2:443:443/tcp
-    volumes:
-      - /var/run/docker.sock:/run/docker.sock
-    #restart: always
-    networks:
-      - doxyroxy
-    #healthcheck:
-    #  test: ["CMD", "curl", "-f", "http://localhost"]
-    #  interval: 1m30s
-    #  timeout: 10s
-    #  retries: 3
 
 networks:
   doxyroxy:

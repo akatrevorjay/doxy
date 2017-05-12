@@ -46,7 +46,7 @@ func (cmdline *CommandLine) ParseParameters(rawParams []string) (res *utils.Conf
 	createAlias := cmdline.app.Flag("alias", "Automatically create an alias with just the container name.").Default(strconv.FormatBool(res.CreateAlias)).Bool()
 	all := cmdline.app.Flag("all", "Process all containers even if they are stopped.").Default(strconv.FormatBool(res.All)).Short('a').Bool()
 
-	nameservers := cmdline.app.Flag("nameserver", "Comma separated list of DNS server(s) for unmatched requests").Default("127.0.0.53:53").Strings()
+	nameservers := cmdline.app.Flag("nameserver", "Comma separated list of DNS server(s) for unmatched requests").Strings()
 	ttl := cmdline.app.Flag("ttl", "TTL for matched requests").Default(strconv.FormatInt(int64(res.Ttl), 10)).Int()
 	forceTtl := cmdline.app.Flag("forcettl", "Force TTL value even for forwared requests.").Bool()
 
