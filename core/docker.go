@@ -52,12 +52,14 @@ func NewDockerManager(c *utils.Config, list servers.ServiceListProvider, tlsConf
 
 // Start starts the DockerManager
 func (d *DockerManager) Start() error {
+	logger.Infof("Starting DockerManager.")
+
 	ctx, cancel := context.WithCancel(context.Background())
 	d.cancel = cancel
 
 	startHandler := func(m eventtypes.Message) {
 		logger.Debugf("Started container '%s'", m.ID)
-		d.events.Emit("container:started", m.ID)
+		go d.events.Emit("container:started", m.ID)
 
 		service, err := d.getService(m.ID)
 		if err != nil {
@@ -67,13 +69,16 @@ func (d *DockerManager) Start() error {
 
 		err = d.list.AddService(m.ID, *service)
 		if err != nil {
-			logger.Errorf("Failed to add service id=%s: %s", m.ID, err)
+			logger.Errorf("Failed to add service id=%s: %s", m.ID, err.Error())
+			return
 		}
+
+		go d.events.Emit("service:added", m.ID)
 	}
 
 	stopHandler := func(m eventtypes.Message) {
 		logger.Debugf("Stopped container '%s'", m.ID)
-		d.events.Emit("container:stopped", m.ID)
+		go d.events.Emit("container:stopped", m.ID, m.Action)
 
 		if d.config.All {
 			logger.Debugf("Stopped container '%s' not removed as --all argument is true", m.ID)
@@ -82,8 +87,12 @@ func (d *DockerManager) Start() error {
 
 		err := d.list.RemoveService(m.ID)
 		if err != nil {
-			logger.Errorf("Failed to remove service id=%s: %s", m.ID, err)
+			logger.Errorf("Failed to remove service id=%s: %s", m.ID, err.Error())
+			return
 		}
+		logger.Debugf("Stopped container '%s'", m.ID)
+
+		go d.events.Emit("service:removed", m.ID)
 	}
 
 	renameHandler := func(m eventtypes.Message) {
@@ -91,49 +100,59 @@ func (d *DockerManager) Start() error {
 		name, ok2 := m.Actor.Attributes["oldName"]
 		if ok && ok2 {
 			logger.Debugf("Renamed container '%s' => '%s'", oldName, name)
-			d.events.Emit("container:renamed", m.ID, oldName, name)
+			go d.events.Emit("container:renamed", m.ID, oldName, name)
 
 			err := d.list.RemoveService(oldName)
 			if err != nil {
-				logger.Errorf("Failed to remove service id=%s: %s", m.ID, err)
+				logger.Errorf("Failed to remove renamed service id=%s: %s", m.ID, err.Error())
 			}
+			go d.events.Emit("service:removed", m.ID)
 
 			service, err := d.getService(m.ID)
 			if err != nil {
-				logger.Errorf("Failed to get service id=%s: %s", m.ID, err)
+				logger.Errorf("Failed to get renamed service id=%s: %s", m.ID, err.Error())
 				return
 			}
 
 			err = d.list.AddService(m.ID, *service)
 			if err != nil {
-				logger.Errorf("Failed to add service id=%s: %s", m.ID, err)
+				logger.Errorf("Failed to add renamed service id=%s: %s", m.ID, err.Error())
 			}
+			go d.events.Emit("service:added", m.ID)
+
+			go d.events.Emit("service:renamed", m.ID)
 		}
 	}
 
 	destroyHandler := func(m eventtypes.Message) {
 		logger.Debugf("Destroyed container '%s'", m.ID)
-		d.events.Emit("container:destroyed", m.ID)
+		go d.events.Emit("container:destroyed", m.ID)
 
 		if d.config.All {
 			err := d.list.RemoveService(m.ID)
 			if err != nil {
-				logger.Errorf("Failed to remove service id=%s: %s", m.ID, err)
+				logger.Errorf("Failed to remove service id=%s: %s", m.ID, err.Error())
 			}
 		}
 	}
 
 	eventHandler := events.NewHandler(events.ByAction)
+
 	eventHandler.Handle("start", startHandler)
-	eventHandler.Handle("stop", stopHandler)
+	//eventHandler.Handle("stop", stopHandler)
 	eventHandler.Handle("die", stopHandler)
-	eventHandler.Handle("kill", stopHandler)
+	//eventHandler.Handle("kill", stopHandler)
 	eventHandler.Handle("destroy", destroyHandler)
 	eventHandler.Handle("rename", renameHandler)
 
 	events.MonitorWithHandler(ctx, d.client, types.EventsOptions{}, eventHandler)
 
-	logger.Infof("Adding pre-existing containers")
+	return nil
+}
+
+// AddExisting Adds existing containers
+func (d *DockerManager) AddExisting() error {
+	logger.Infof("Adding existing containers")
 
 	containers, err := d.client.ContainerList(context.Background(), types.ContainerListOptions{})
 	if err != nil {

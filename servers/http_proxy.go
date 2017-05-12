@@ -66,7 +66,7 @@ type ProxyHttpServer struct {
 	events *emitter.Emitter
 }
 
-func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider, events *emitter.Emitter) *ProxyHttpServer {
+func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider, events *emitter.Emitter) (*ProxyHttpServer, error) {
 	s := &ProxyHttpServer{
 		config: c,
 		list:   list,
@@ -153,15 +153,17 @@ func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider, events *emitt
 			}
 		})
 
-	go func(){
-		for event := range events.On("service:domain:*") {
+	s.server = proxy
+
+	go func() {
+		for event := range s.events.On("service:domain:*") {
 			top_base := utils.Reverse(strings.Split(event.OriginalTopic, ":"))[0]
 
 			switch {
 			case top_base == "added" || top_base == "removed":
 				id := event.String(0)
 				domain := event.String(1)
-				logger.Debugf("http event: base=%s id=%s domain=%s", top_base, id, domain)
+				//logger.Debugf("http event: base=%s id=%s domain=%s", top_base, id, domain)
 
 				if top_base == "added" {
 					go s.AddProxyDomain(id, domain)
@@ -172,8 +174,7 @@ func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider, events *emitt
 		}
 	}()
 
-	s.server = proxy
-	return s
+	return s, nil
 }
 
 // AddProxyDomain Adds a proxy domain
@@ -242,10 +243,12 @@ func (s *ProxyHttpServer) Start() error {
 		}
 	}()
 
-	err := http.ListenAndServe(s.config.HttpAddr, s.server)
-	if err != nil {
-		logger.Fatalf("Error listening for http connections - %v", err)
-	}
+	go func() {
+		err := http.ListenAndServe(s.config.HttpAddr, s.server)
+		if err != nil {
+			logger.Fatalf("Error listening for http connections - %v", err)
+		}
+	}()
 
 	return nil
 }

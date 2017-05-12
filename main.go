@@ -13,6 +13,7 @@ import (
 	"crypto/x509"
 	"io/ioutil"
 	"os"
+	"sync"
 
 	"github.com/olebedev/emitter"
 	"github.com/op/go-logging"
@@ -50,22 +51,21 @@ func main() {
 
 	logger.Infof("Init")
 
+	var wg sync.WaitGroup
+
 	events := &emitter.Emitter{}
 	//events.Use("*", emitter.Sync)
 	//events.Use("*", emitter.Void)
 
 	go func() {
-		for event := range events.On("*") {
-			logger.Debugf("Event: %s", event)
-		}
+	    for event := range events.On("*") {
+		    logger.Debugf("Event: %s", event)
+	    }
 	}()
 
 	//events.On("*", func(event *emitter.Event) {
 	//    logger.Debugf("Event2: %s", event)
 	//})
-
-	dnsServer := servers.NewDNSServer(config, events)
-	httpProxyServer := servers.NewHTTPProxyServer(config, dnsServer, events)
 
 	var tlsConfig *tls.Config
 	if config.TlsVerify {
@@ -87,6 +87,16 @@ func main() {
 		}
 	}
 
+	dnsServer, err := servers.NewDNSServer(config, events)
+	if err != nil {
+		logger.Fatalf("Error: '%s'", err)
+	}
+
+	httpProxyServer, err := servers.NewHTTPProxyServer(config, dnsServer, events)
+	if err != nil {
+		logger.Fatalf("Error: '%s'", err)
+	}
+
 	docker, err := core.NewDockerManager(config, dnsServer, tlsConfig, events)
 	if err != nil {
 		logger.Fatalf("Error: '%s'", err)
@@ -96,11 +106,21 @@ func main() {
 		logger.Fatalf("Error: '%s'", err)
 	}
 
+	if err := httpProxyServer.Start(); err != nil {
+		logger.Fatalf("Error: '%s'", err)
+	}
+
 	if err := docker.Start(); err != nil {
 		logger.Fatalf("Error: '%s'", err)
 	}
 
-	if err := httpProxyServer.Start(); err != nil {
+	if err := docker.AddExisting(); err != nil {
 		logger.Fatalf("Error: '%s'", err)
 	}
+
+	logger.Infof("Ready.")
+
+	// Wait forever
+	wg.Add(1)
+	wg.Wait()
 }
