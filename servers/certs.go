@@ -1,5 +1,23 @@
 package servers
 
+import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	//"flag"
+	//"fmt"
+	//"log"
+	//"math/big"
+	//"net"
+	//"os"
+	//"strings"
+	//"time"
+)
+
 // TODO Generate this on startup if it's non-existent (file)
 
 var caCert = []byte(`-----BEGIN CERTIFICATE-----
@@ -52,3 +70,39 @@ BTubAoGBAMEhI/Wy9wAETuXwN84AhmPdQsyCyp37YKt2ZKaqu37x9v2iL8JTbPEz
 pdBzkA2Gc0Wdb6ekIzRrTsJQl+c/0m9byFHsRsxXW2HnezfOFX1H4qAmF6KWP0ub
 M8aIn6Rab4sNPSrvKGrU6rFpv/6M33eegzldVnV9ku6uPJI1fFTC
 -----END RSA PRIVATE KEY-----`)
+
+
+func publicKey(priv interface{}) interface{} {
+	switch k := priv.(type) {
+	case *rsa.PrivateKey:
+		return &k.PublicKey
+	case *ecdsa.PrivateKey:
+		return &k.PublicKey
+	default:
+		return nil
+	}
+}
+
+func pemBlockForKey(priv interface{}) *pem.Block {
+	switch k := priv.(type) {
+	case *rsa.PrivateKey:
+		return &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(k)}
+	case *ecdsa.PrivateKey:
+		b, err := x509.MarshalECPrivateKey(k)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Unable to marshal ECDSA private key: %v", err)
+			os.Exit(2)
+		}
+		return &pem.Block{Type: "EC PRIVATE KEY", Bytes: b}
+	default:
+		return nil
+	}
+}
+
+func generateKey(bits int) error {
+	var priv interface{}
+
+	//priv, err = ecdsa.GenerateKey(elliptic.P521(), rand.Reader)
+	priv, err = rsa.GenerateKey(rand.Reader, bits)
+	orPanic(err)
+}
