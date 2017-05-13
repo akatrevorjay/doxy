@@ -12,4 +12,4 @@ import (
 	"github.com/op/go-logging"
 )
 
-var logger = logging.MustGetLogger("doxyroxy.servers")
+var logger = logging.MustGetLogger("doxy.servers")

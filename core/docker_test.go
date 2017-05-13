@@ -9,7 +9,7 @@
 package core
 
 import (
-	"github.com/akatrevorjay/doxyroxy/servers"
+	"github.com/akatrevorjay/doxy/servers"
 	"reflect"
 	"testing"
 )

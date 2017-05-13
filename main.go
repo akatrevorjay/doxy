@@ -1,4 +1,4 @@
-/* doxyroxy.go
+/* doxy.go
  *
  * Copyright (C) 2016 Alexandre ACEBEDO
  *
@@ -17,14 +17,14 @@ import (
 
 	"github.com/op/go-logging"
 
-	"github.com/akatrevorjay/doxyroxy/core"
-	"github.com/akatrevorjay/doxyroxy/servers"
-	"github.com/akatrevorjay/doxyroxy/utils"
+	"github.com/akatrevorjay/doxy/core"
+	"github.com/akatrevorjay/doxy/servers"
+	"github.com/akatrevorjay/doxy/utils"
 )
 
 // GitSummary contains the version number
 var GitSummary string
-var logger = logging.MustGetLogger("doxyroxy.main")
+var logger = logging.MustGetLogger("doxy.main")
 
 func orPanic(err error) {
 	if err != nil {

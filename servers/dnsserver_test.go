@@ -9,7 +9,7 @@
 package servers
 
 import (
-	"github.com/akatrevorjay/doxyroxy/utils"
+	"github.com/akatrevorjay/doxy/utils"
 	"github.com/miekg/dns"
 	"net"
 	"strings"

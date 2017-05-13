@@ -1,20 +1,20 @@
 version: '3'
 
 services:
-  doxyroxy:
+  doxy:
     build: .
-    hostname: doxyroxy
-    container_name: doxyroxy
-    command: doxyroxy -D :53 -H :80 -I :443
+    hostname: doxy
+    container_name: doxy
+    command: doxy -D :53 -H :80 -I :443
     #restart: always
     userns_mode: host
 
     volumes:
-      - .:/go/src/github.com/akatrevorjay/doxyroxy
+      - .:/go/src/github.com/akatrevorjay/doxy
       - /var/run/docker.sock:/run/docker.sock
 
     networks:
-      - doxyroxy
+      - doxy
 
     #healthcheck:
     #  test: ["CMD", "curl", "-f", "http://localhost"]
@@ -41,7 +41,7 @@ services:
       #- 10.69.69.2:443:443/tcp
 
 networks:
-  doxyroxy:
+  doxy:
     ipam:
       config:
         - subnet: 10.69.69.0/30

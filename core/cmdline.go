@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/akatrevorjay/doxyroxy/utils"
+	"github.com/akatrevorjay/doxy/utils"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -23,7 +23,7 @@ type CommandLine struct {
 
 func NewCommandLine(version string) (res *CommandLine) {
 	res = &CommandLine{}
-	res.app = kingpin.New("doxyroxy", "Automatic DNS for docker containers.")
+	res.app = kingpin.New("doxy", "Automatic DNS for docker containers.")
 	res.app.Version(version)
 	res.app.HelpFlag.Short('h')
 	return

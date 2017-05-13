@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/akatrevorjay/doxyroxy/utils"
+	"github.com/akatrevorjay/doxy/utils"
 	"github.com/miekg/dns"
 )
 
@@ -413,7 +413,7 @@ func (s *DNSServer) createSOA() []dns.RR {
 
 // isPrefixQuery is used to determine whether "query" is a potential prefix
 // query for "name". It allows for wildcards (*) in the query. However is makes
-// one exception to accomodate the desired behavior we wish from doxyroxy,
+// one exception to accomodate the desired behavior we wish from doxy,
 // namely, the query may be longer than "name" and still be a valid prefix
 // query for "name".
 // Examples:
