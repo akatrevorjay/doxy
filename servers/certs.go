@@ -2,18 +2,18 @@ package servers
 
 import (
 	"crypto/ecdsa"
-	"crypto/elliptic"
+	//"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
-	"crypto/x509/pkix"
+	//"crypto/x509/pkix"
 	"encoding/pem"
 	//"flag"
-	//"fmt"
+	"fmt"
 	//"log"
 	//"math/big"
 	//"net"
-	//"os"
+	"os"
 	//"strings"
 	//"time"
 )
@@ -99,10 +99,10 @@ func pemBlockForKey(priv interface{}) *pem.Block {
 	}
 }
 
-func generateKey(bits int) error {
-	var priv interface{}
-
-	//priv, err = ecdsa.GenerateKey(elliptic.P521(), rand.Reader)
-	priv, err = rsa.GenerateKey(rand.Reader, bits)
+func generateKey(bits int) (interface{}, error) {
+	//priv, err := ecdsa.GenerateKey(elliptic.P521(), rand.Reader)
+	priv, err := rsa.GenerateKey(rand.Reader, bits)
 	orPanic(err)
+
+	return priv, nil
 }
