@@ -21,8 +21,8 @@ import (
 // DNSServer represents a DNS server
 type DNSServer struct {
 	config     *utils.Config
-	server_udp *dns.Server
-	server_tcp *dns.Server
+	serverUdp *dns.Server
+	serverTcp *dns.Server
 	mux        *dns.ServeMux
 	lock       *sync.RWMutex
 	client     *dns.Client
@@ -51,8 +51,8 @@ func NewDNSServer(c *utils.Config, list ServiceListProvider) (*DNSServer, error)
 	// Catchall
 	s.mux.HandleFunc(".", s.handleForward)
 
-	s.server_udp = &dns.Server{Addr: c.DnsAddr, Net: "udp", Handler: s.mux}
-	s.server_tcp = &dns.Server{Addr: c.DnsAddr, Net: "tcp", Handler: s.mux}
+	s.serverUdp = &dns.Server{Addr: c.DnsAddr, Net: "udp", Handler: s.mux}
+	s.serverTcp = &dns.Server{Addr: c.DnsAddr, Net: "tcp", Handler: s.mux}
 
 	return s, nil
 }
@@ -74,14 +74,14 @@ func (s *DNSServer) Start() error {
 	logger.Infof("Starting DNS service; domain='%s' listening on %s/tcp+udp", s.config.Domain.String(), s.config.DnsAddr)
 
 	go func() {
-		err := s.server_udp.ListenAndServe()
+		err := s.serverUdp.ListenAndServe()
 		if err != nil {
 			logger.Fatalf("Error listening for DNS over UDP: %v", err)
 		}
 	}()
 
 	go func() {
-		err := s.server_tcp.ListenAndServe()
+		err := s.serverTcp.ListenAndServe()
 		if err != nil {
 			logger.Fatalf("Error listening for DNS over TCP: %v", err)
 		}
@@ -92,8 +92,8 @@ func (s *DNSServer) Start() error {
 
 // Stop stops the DNSServer
 func (s *DNSServer) Stop() {
-	s.server_udp.Shutdown()
-	s.server_tcp.Shutdown()
+	s.serverUdp.Shutdown()
+	s.serverTcp.Shutdown()
 }
 
 // AddService adds a new container and thus new DNS records
