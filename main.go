@@ -75,9 +75,11 @@ func main() {
 
 	dnsServer, err := servers.NewDNSServer(config, list)
 	orPanic(err)
+	list.RegisterHandler("dns", dnsServer)
 
 	httpProxyServer, err := servers.NewHTTPProxyServer(config, list)
 	orPanic(err)
+	list.RegisterHandler("http", httpProxyServer)
 
 	docker, err := core.NewDockerManager(config, list, tlsConfig)
 	orPanic(err)

@@ -163,7 +163,13 @@ func (s *ProxyHttpServer) AddService(id string, service *Service) error {
 }
 
 // RemoveService removes a new container and thus DNS records
-func (s *ProxyHttpServer) RemoveService(id string, service *Service) error {
+func (s *ProxyHttpServer) RemoveService(id string) error {
+	service, err := (*s.list).GetService(id)
+	if err != nil {
+		logger.Errorf("Cannot remove a service that doesn't already exist. id=%s", id)
+		return nil
+	}
+
 	if len(service.IPs) == 0 {
 		logger.Warningf("Service '%s' ignored: No IP provided:", id, id)
 		return nil

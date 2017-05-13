@@ -13,9 +13,24 @@ import (
 )
 
 func orPanic(err error) {
-	if err != nil {
-		panic(err)
+	if err == nil {
+		return
 	}
+	panic(err)
+}
+
+func orFatalf(err error) {
+	if err == nil {
+		return
+	}
+	logger.Fatalf("Error: %s", err.Error())
+}
+
+func orErrorf(err error) {
+	if err == nil {
+		return
+	}
+	logger.Errorf("Error: %s", err.Error())
 }
 
 // Service represents a container and an attached DNS record
@@ -98,19 +113,16 @@ type ServiceHandler interface {
 
 // ServiceListProvider represents the entrypoint to get containers
 type ServiceListProvider interface {
+	ServiceHandler
 	GetService(string) (*Service, error)
 	GetAllServices() (map[string]*Service, error)
 	QueryServices(string) chan *Service
 	QueryServicesByIP(net.IP) chan *Service
-	AddService(string, *Service) error
-	RemoveService(string) error
-	//ServiceHandler
 }
 
 // ServiceMux stores service state and muxes events to ServiceHandler's
 type ServiceMux struct {
 	sync.RWMutex
-	ServiceListProvider
 	config   *utils.Config
 	services map[string]*Service
 	handlers map[string]*ServiceHandler
@@ -227,6 +239,15 @@ func (s *ServiceMux) QueryServicesByIP(ip net.IP) chan *Service {
 	return c
 }
 
+// RegisterHandler registers a handler
+func (s *ServiceMux) RegisterHandler(name string, handler ServiceHandler) error {
+	s.Lock()
+	s.handlers[name] = &handler
+	s.Unlock()
+
+	return nil
+}
+
 // AddService adds a new service
 func (s *ServiceMux) AddService(id string, service *Service) error {
 	id = s.getExpandedID(id)
@@ -237,6 +258,10 @@ func (s *ServiceMux) AddService(id string, service *Service) error {
 	s.Lock()
 	s.services[id] = service
 	s.Unlock()
+
+	for _, handler := range s.handlers {
+		(*handler).AddService(id, service)
+	}
 
 	logger.Infof("Added service id=%s name=%s", id, service.Name)
 
@@ -254,6 +279,10 @@ func (s *ServiceMux) RemoveService(id string) error {
 	}
 
 	logger.Debugf("Removing service id=%s name=%s", id, service.Name)
+
+	for _, handler := range s.handlers {
+		(*handler).RemoveService(id)
+	}
 
 	s.Lock()
 	delete(s.services, id)
