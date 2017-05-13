@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/docker/go-connections/nat"
 	"github.com/akatrevorjay/doxy/utils"
 	"github.com/miekg/dns"
 )
@@ -35,13 +36,15 @@ func orErrorf(err error) {
 
 // Service represents a container and an attached DNS record
 type Service struct {
-	ID      string
-	Name    string
-	Image   string
-	Primary string
-	Aliases []string
-	IPs     []net.IP
-	TTL     int
+	ID       string
+	Name     string
+	Image    string
+	Primary  string
+	Aliases  []string
+	IPs      []net.IP
+	TTL      int
+	Ports    nat.PortMap
+	HttpPort string
 }
 
 // NewService creates a new service
@@ -51,7 +54,7 @@ func NewService() (*Service, error) {
 }
 
 func (s Service) String() string {
-	return fmt.Sprintf("Service{name=%s primary=%s aliases=%s ips=%s ttl=%d}", s.Name, s.Primary, s.Aliases, s.IPs, s.TTL)
+	return fmt.Sprintf("Service{name=%s primary=%s aliases=%s ports=%s httpPort=%s ips=%s ttl=%d}", s.Name, s.Primary, s.Aliases, s.Ports, s.HttpPort, s.IPs, s.TTL)
 }
 
 // ListDomains lists domains

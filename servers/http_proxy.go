@@ -125,7 +125,7 @@ func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider) (*ProxyHttpSe
 			if err != nil {
 				host, port = req.URL.Host, "80"
 			}
-			remoteHostport := fmt.Sprintf("%s:%s", host, port)
+			remoteHostport := net.JoinHostPort(host, port)
 
 			remote, err := connectDial(proxy, "tcp", remoteHostport)
 			orPanic(err)
@@ -155,7 +155,7 @@ func (s *ProxyHttpServer) AddService(id string, service *Service) error {
 	}
 
 	for domain := range service.ListDomains(s.config.Domain.String(), false) {
-		logger.Debugf("HTTP/S domain=%s for service=%s", domain, service.Name)
+		logger.Debugf("http/s domain=%s for service=%s", domain, service.Name)
 		//s.AddProxyDomain(domain)
 	}
 

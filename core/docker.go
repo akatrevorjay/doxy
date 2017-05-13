@@ -202,6 +202,26 @@ func (d *DockerManager) createService(id string) (*servers.Service, error) {
 		}
 	}
 
+	for src, _ := range desc.NetworkSettings.Ports {
+		//utils.Dump(src)
+		//utils.Dump(dst)
+		//utils.Dump(src.Proto())
+		//utils.Dump(src.Port())
+
+		switch src.Proto() {
+		case "tcp":
+			switch src.Port() {
+			case "80":
+				service.HttpPort = src.Port()
+				break
+			case "8000", "8080":
+				service.HttpPort = src.Port()
+			}
+		}
+	}
+
+	service.Ports = desc.NetworkSettings.Ports
+
 	//applyLabelOverrides(&service, desc.Config.Labels, d.config.LabelPrefix)
 	service = applyLabelOverrides(service, desc.Config.Labels, d.config.Name)
 
@@ -216,6 +236,8 @@ func (d *DockerManager) createService(id string) (*servers.Service, error) {
 		aliases, _ := genAliases(service)
 		service.Aliases = append(service.Aliases, aliases...)
 	}
+
+	logger.Infof("Created service: %s", service)
 
 	return service, nil
 }
