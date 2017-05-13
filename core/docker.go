@@ -203,11 +203,6 @@ func (d *DockerManager) createService(id string) (*servers.Service, error) {
 	}
 
 	for src, _ := range desc.NetworkSettings.Ports {
-		//utils.Dump(src)
-		//utils.Dump(dst)
-		//utils.Dump(src.Proto())
-		//utils.Dump(src.Port())
-
 		switch src.Proto() {
 		case "tcp":
 			switch src.Port() {
