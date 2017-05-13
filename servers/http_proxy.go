@@ -125,11 +125,30 @@ func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider) (*ProxyHttpSe
 			if err != nil {
 				host, port = req.URL.Host, "80"
 			}
+
+			ok := false
+			for svc := range (*s.list).QueryServices(host) {
+				host = svc.IPs[0].String()
+
+				ok = true
+				break
+			}
+
+			if !ok {
+				return
+			}
+
+			// trim off any trailing dot
+			if host[len(host)-1] == '.' {
+				host = host[:len(host)-1]
+			}
+
 			remoteHostport := net.JoinHostPort(host, port)
 
 			utils.Dump(req)
 			utils.Dump(remoteHostport)
 
+			// TODO Look up from DNS
 			remote, err := connectDial(proxy, "tcp", remoteHostport)
 			orPanic(err)
 
