@@ -10,19 +10,11 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
-	"strings"
 
 	"github.com/akatrevorjay/doxyroxy/utils"
 	"github.com/elazarl/goproxy"
 	vhost "github.com/inconshreveable/go-vhost"
-	"github.com/olebedev/emitter"
 )
-
-func orPanic(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
 
 func setCA(caCert, caKey []byte) error {
 	goproxyCa, err := tls.X509KeyPair(caCert, caKey)
@@ -61,16 +53,14 @@ func setCA(caCert, caKey []byte) error {
 // ProxyHTTPServer represents the proxy endpoint
 type ProxyHttpServer struct {
 	config *utils.Config
-	list   ServiceListProvider
+	list   *ServiceListProvider
 	server *goproxy.ProxyHttpServer
-	events *emitter.Emitter
 }
 
-func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider, events *emitter.Emitter) (*ProxyHttpServer, error) {
+func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider) (*ProxyHttpServer, error) {
 	s := &ProxyHttpServer{
 		config: c,
-		list:   list,
-		events: events,
+		list:   &list,
 	}
 
 	setCA(caCert, caKey)
@@ -154,49 +144,37 @@ func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider, events *emitt
 		})
 
 	s.server = proxy
-
-	go func() {
-		for event := range s.events.On("service:domain:*") {
-			top_base := utils.Reverse(strings.Split(event.OriginalTopic, ":"))[0]
-
-			switch {
-			case top_base == "added" || top_base == "removed":
-				id := event.String(0)
-				domain := event.String(1)
-				//logger.Debugf("http event: base=%s id=%s domain=%s", top_base, id, domain)
-
-				if top_base == "added" {
-					go s.AddProxyDomain(id, domain)
-				} else if top_base == "removed" {
-					go s.RemoveProxyDomain(id, domain)
-				}
-			}
-		}
-	}()
-
 	return s, nil
 }
 
-// AddProxyDomain Adds a proxy domain
-func (s *ProxyHttpServer) AddProxyDomain(id string, domain string) {
-	service, err := s.list.GetService(id)
-	if err != nil {
-		logger.Errorf("Failed to get service id=%s: %s", id, err)
-		return
+// AddService adds a new container and thus new DNS records
+func (s *ProxyHttpServer) AddService(id string, service *Service) error {
+	if len(service.IPs) == 0 {
+		logger.Warningf("Service '%s' ignored: No IP provided:", id, id)
+		return nil
 	}
 
-	logger.Debugf("Adding HTTP for service='%s' domain='%s'", service.Name, domain)
+	for domain := range service.ListDomains(s.config.Domain.String(), false) {
+		logger.Debugf("HTTP/S domain=%s for service=%s", domain, service.Name)
+		//s.AddProxyDomain(domain)
+	}
+
+	return nil
 }
 
-// AddProxyDomain Adds a proxy domain
-func (s *ProxyHttpServer) RemoveProxyDomain(id string, domain string) {
-	service, err := s.list.GetService(id)
-	if err != nil {
-		logger.Errorf("Failed to get service id=%s: %s", id, err)
-		return
+// RemoveService removes a new container and thus DNS records
+func (s *ProxyHttpServer) RemoveService(id string, service *Service) error {
+	if len(service.IPs) == 0 {
+		logger.Warningf("Service '%s' ignored: No IP provided:", id, id)
+		return nil
 	}
 
-	logger.Debugf("Removing HTTP for service='%s' domain='%s'", service.Name, domain)
+	for domain := range service.ListDomains(s.config.Domain.String(), false) {
+		logger.Debugf("Removing http/s domain=%s for service=%s", domain, service.Name)
+		//s.RemoveProxyDomain(domain)
+	}
+
+	return nil
 }
 
 // Start starts the http endpoints

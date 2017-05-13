@@ -24,30 +24,35 @@ import (
 	"github.com/docker/engine-api/client"
 	"github.com/docker/engine-api/types"
 	eventtypes "github.com/docker/engine-api/types/events"
-	"github.com/olebedev/emitter"
 	"github.com/vdemeester/docker-events"
 	"golang.org/x/net/context"
 )
 
+func orPanic(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
 // DckerManager is the entrypoint to the docker daemon
 type DockerManager struct {
 	config *utils.Config
-	list   servers.ServiceListProvider
+	list   *servers.ServiceListProvider
 	client *client.Client
 	cancel context.CancelFunc
-	events *emitter.Emitter
 }
 
 // NewDockerManager creates a new DockerManager
-func NewDockerManager(c *utils.Config, list servers.ServiceListProvider, tlsConfig *tls.Config, events *emitter.Emitter) (*DockerManager, error) {
+func NewDockerManager(c *utils.Config, list servers.ServiceListProvider, tlsConfig *tls.Config) (*DockerManager, error) {
 	defaultHeaders := map[string]string{"User-Agent": "engine-api-cli-1.0"}
-	dclient, err := client.NewClient(c.DockerHost, "v1.23", nil, defaultHeaders)
 
+	dclient, err := client.NewClient(c.DockerHost, "v1.23", nil, defaultHeaders)
 	if err != nil {
 		return nil, err
 	}
 
-	return &DockerManager{config: c, list: list, client: dclient, events: events}, nil
+	d := &DockerManager{config: c, list: &list, client: dclient}
+	return d, nil
 }
 
 // Start starts the DockerManager
@@ -59,40 +64,33 @@ func (d *DockerManager) Start() error {
 
 	startHandler := func(m eventtypes.Message) {
 		logger.Debugf("Started container '%s'", m.ID)
-		go d.events.Emit("container:started", m.ID)
 
-		service, err := d.getService(m.ID)
+		service, err := d.createService(m.ID)
 		if err != nil {
 			logger.Errorf("%s", err)
 			return
 		}
 
-		err = d.list.AddService(m.ID, *service)
+		err = (*d.list).AddService(m.ID, service)
 		if err != nil {
 			logger.Errorf("Failed to add service id=%s: %s", m.ID, err.Error())
 			return
 		}
-
-		go d.events.Emit("service:added", m.ID)
 	}
 
 	stopHandler := func(m eventtypes.Message) {
 		logger.Debugf("Stopped container '%s'", m.ID)
-		go d.events.Emit("container:stopped", m.ID, m.Action)
 
 		if d.config.All {
 			logger.Debugf("Stopped container '%s' not removed as --all argument is true", m.ID)
 			return
 		}
 
-		err := d.list.RemoveService(m.ID)
+		err := (*d.list).RemoveService(m.ID)
 		if err != nil {
 			logger.Errorf("Failed to remove service id=%s: %s", m.ID, err.Error())
 			return
 		}
-		logger.Debugf("Stopped container '%s'", m.ID)
-
-		go d.events.Emit("service:removed", m.ID)
 	}
 
 	renameHandler := func(m eventtypes.Message) {
@@ -100,36 +98,30 @@ func (d *DockerManager) Start() error {
 		name, ok2 := m.Actor.Attributes["oldName"]
 		if ok && ok2 {
 			logger.Debugf("Renamed container '%s' => '%s'", oldName, name)
-			go d.events.Emit("container:renamed", m.ID, oldName, name)
 
-			err := d.list.RemoveService(oldName)
+			err := (*d.list).RemoveService(oldName)
 			if err != nil {
 				logger.Errorf("Failed to remove renamed service id=%s: %s", m.ID, err.Error())
 			}
-			go d.events.Emit("service:removed", m.ID)
 
-			service, err := d.getService(m.ID)
+			service, err := d.createService(m.ID)
 			if err != nil {
 				logger.Errorf("Failed to get renamed service id=%s: %s", m.ID, err.Error())
 				return
 			}
 
-			err = d.list.AddService(m.ID, *service)
+			err = (*d.list).AddService(m.ID, service)
 			if err != nil {
 				logger.Errorf("Failed to add renamed service id=%s: %s", m.ID, err.Error())
 			}
-			go d.events.Emit("service:added", m.ID)
-
-			go d.events.Emit("service:renamed", m.ID)
 		}
 	}
 
 	destroyHandler := func(m eventtypes.Message) {
 		logger.Debugf("Destroyed container '%s'", m.ID)
-		go d.events.Emit("container:destroyed", m.ID)
 
 		if d.config.All {
-			err := d.list.RemoveService(m.ID)
+			err := (*d.list).RemoveService(m.ID)
 			if err != nil {
 				logger.Errorf("Failed to remove service id=%s: %s", m.ID, err.Error())
 			}
@@ -160,13 +152,13 @@ func (d *DockerManager) AddExisting() error {
 	}
 
 	for _, container := range containers {
-		service, err := d.getService(container.ID)
+		service, err := d.createService(container.ID)
 		if err != nil {
 			logger.Errorf("%s", err)
 			continue
 		}
 
-		err = d.list.AddService(container.ID, *service)
+		err = (*d.list).AddService(container.ID, service)
 		if err != nil {
 			logger.Errorf("Failed to add service id=%s: %s", container.ID, err)
 		}
@@ -180,13 +172,14 @@ func (d *DockerManager) Stop() {
 	d.cancel()
 }
 
-func (d *DockerManager) getService(id string) (*servers.Service, error) {
+func (d *DockerManager) createService(id string) (*servers.Service, error) {
 	desc, err := d.client.ContainerInspect(context.Background(), id)
 	if err != nil {
 		return nil, err
 	}
 
-	service := servers.NewService()
+	service, err := servers.NewService()
+	orPanic(err)
 	service.Aliases = make([]string, 0)
 
 	service.Image = getImageName(desc.Config.Image)
@@ -195,6 +188,7 @@ func (d *DockerManager) getService(id string) (*servers.Service, error) {
 		service.Image = ""
 	}
 	service.Name = cleanContainerName(desc.Name)
+	service.Primary = utils.DomainJoin(service.Name, d.config.Domain.String(), "")
 
 	switch len(desc.NetworkSettings.Networks) {
 	case 0:
@@ -222,6 +216,7 @@ func (d *DockerManager) getService(id string) (*servers.Service, error) {
 		aliases, _ := genAliases(service)
 		service.Aliases = append(service.Aliases, aliases...)
 	}
+
 	return service, nil
 }
 
@@ -229,6 +224,7 @@ func genAliases(service *servers.Service) (out []string, err error) {
 	// Compose style: `project_service_idx` gets churned into:
 	// - i.s.p
 	// - s.p
+	// Eventually this should be done from the tags compose sets.
 	parts := strings.Split(service.Name, "_")
 	if len(parts) == 3 {
 		// i.s.p

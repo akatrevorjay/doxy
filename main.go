@@ -15,7 +15,6 @@ import (
 	"os"
 	"sync"
 
-	"github.com/olebedev/emitter"
 	"github.com/op/go-logging"
 
 	"github.com/akatrevorjay/doxyroxy/core"
@@ -27,13 +26,17 @@ import (
 var GitSummary string
 var logger = logging.MustGetLogger("doxyroxy.main")
 
+func orPanic(err error) {
+	if err != nil {
+		logger.Fatalf("Error: %s", err.Error())
+	}
+}
+
 func main() {
 	var cmdLine = core.NewCommandLine(GitSummary)
 
 	config, err := cmdLine.ParseParameters(os.Args[1:])
-	if err != nil {
-		logger.Fatalf(err.Error())
-	}
+	orPanic(err)
 
 	verbosity := 0
 	if config.Quiet == false {
@@ -45,82 +48,56 @@ func main() {
 	}
 
 	err = utils.InitLoggers(verbosity)
-	if err != nil {
-		logger.Fatalf("Unable to initialize loggers! %s", err.Error())
-	}
+	orPanic(err)
 
 	logger.Infof("Init")
-
-	var wg sync.WaitGroup
-
-	events := &emitter.Emitter{}
-	//events.Use("*", emitter.Sync)
-	//events.Use("*", emitter.Void)
-
-	go func() {
-	    for event := range events.On("*") {
-		    logger.Debugf("Event: %s", event)
-	    }
-	}()
-
-	//events.On("*", func(event *emitter.Event) {
-	//    logger.Debugf("Event2: %s", event)
-	//})
 
 	var tlsConfig *tls.Config
 	if config.TlsVerify {
 		clientCert, err := tls.LoadX509KeyPair(config.TlsCert, config.TlsKey)
-		if err != nil {
-			logger.Fatalf("Error: '%s'", err)
-		}
+		orPanic(err)
+
 		tlsConfig = &tls.Config{
 			MinVersion:   tls.VersionTLS12,
 			Certificates: []tls.Certificate{clientCert},
 		}
+
 		pemData, err := ioutil.ReadFile(config.TlsCaCert)
-		if err == nil {
-			rootCert := x509.NewCertPool()
-			rootCert.AppendCertsFromPEM(pemData)
-			tlsConfig.RootCAs = rootCert
-		} else {
-			logger.Fatalf("Error: '%s'", err)
-		}
+		orPanic(err)
+
+		rootCert := x509.NewCertPool()
+		rootCert.AppendCertsFromPEM(pemData)
+		tlsConfig.RootCAs = rootCert
 	}
 
-	dnsServer, err := servers.NewDNSServer(config, events)
-	if err != nil {
-		logger.Fatalf("Error: '%s'", err)
-	}
+	list, err := servers.NewServiceMux(config)
+	orPanic(err)
 
-	httpProxyServer, err := servers.NewHTTPProxyServer(config, dnsServer, events)
-	if err != nil {
-		logger.Fatalf("Error: '%s'", err)
-	}
+	dnsServer, err := servers.NewDNSServer(config, list)
+	orPanic(err)
 
-	docker, err := core.NewDockerManager(config, dnsServer, tlsConfig, events)
-	if err != nil {
-		logger.Fatalf("Error: '%s'", err)
-	}
+	httpProxyServer, err := servers.NewHTTPProxyServer(config, list)
+	orPanic(err)
 
-	if err := dnsServer.Start(); err != nil {
-		logger.Fatalf("Error: '%s'", err)
-	}
+	docker, err := core.NewDockerManager(config, list, tlsConfig)
+	orPanic(err)
 
-	if err := httpProxyServer.Start(); err != nil {
-		logger.Fatalf("Error: '%s'", err)
-	}
+	err = dnsServer.Start()
+	orPanic(err)
 
-	if err := docker.Start(); err != nil {
-		logger.Fatalf("Error: '%s'", err)
-	}
+	err = httpProxyServer.Start()
+	orPanic(err)
 
-	if err := docker.AddExisting(); err != nil {
-		logger.Fatalf("Error: '%s'", err)
-	}
+	err = docker.Start()
+	orPanic(err)
+
+	err = docker.AddExisting()
+	orPanic(err)
 
 	logger.Infof("Ready.")
 
 	// Wait forever
+	var wg sync.WaitGroup
 	wg.Add(1)
 	wg.Wait()
 }

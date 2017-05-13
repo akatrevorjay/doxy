@@ -9,47 +9,39 @@
 package servers
 
 import (
-	"errors"
-	"regexp"
+	"net"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/akatrevorjay/doxyroxy/utils"
 	"github.com/miekg/dns"
-	"github.com/olebedev/emitter"
 )
-
-type ServiceList struct {
-	config *utils.Config
-}
 
 // DNSServer represents a DNS server
 type DNSServer struct {
-	config   *utils.Config
-	server_udp   *dns.Server
+	config     *utils.Config
+	server_udp *dns.Server
 	server_tcp *dns.Server
-	mux      *dns.ServeMux
-	services map[string]*Service
-	lock     *sync.RWMutex
-	events   *emitter.Emitter
-	client   *dns.Client
+	mux        *dns.ServeMux
+	lock       *sync.RWMutex
+	client     *dns.Client
+	list       *ServiceListProvider
 }
 
 // NewDNSServer create a new DNSServer
-func NewDNSServer(c *utils.Config, events *emitter.Emitter) (*DNSServer, error) {
+func NewDNSServer(c *utils.Config, list ServiceListProvider) (*DNSServer, error) {
 	s := &DNSServer{
-		config:   c,
-		services: make(map[string]*Service),
-		lock:     &sync.RWMutex{},
-		events:   events,
-		client:   &dns.Client{},
+		config: c,
+		lock:   &sync.RWMutex{},
+		client: &dns.Client{
+			// Suppress multiple outstanding queries (with the same question, type and class)
+			SingleInflight: true,
+		},
+		list: &list,
 	}
 
-	// Suppress multiple outstanding queries (with the same question, type and class)
-	s.client.SingleInflight = true
-
-	//s.clientLoadResolvconf()
+	s.clientLoadResolvconf()
 
 	s.mux = dns.NewServeMux()
 
@@ -104,16 +96,8 @@ func (s *DNSServer) Stop() {
 	s.server_tcp.Shutdown()
 }
 
-func (s *DNSServer) getServicePrimary(svc Service) string {
-	return utils.DomainJoin(svc.Name, s.config.Domain.String(), "")
-}
-
 // AddService adds a new container and thus new DNS records
-func (s *DNSServer) AddService(id string, service Service) error {
-	if len(service.Primary) == 0 {
-		service.Primary = s.getServicePrimary(service)
-	}
-
+func (s *DNSServer) AddService(id string, service *Service) error {
 	if len(service.IPs) == 0 {
 		logger.Warningf("Service '%s' ignored: No IP provided:", id, id)
 		return nil
@@ -121,12 +105,6 @@ func (s *DNSServer) AddService(id string, service Service) error {
 
 	defer s.lock.Unlock()
 	s.lock.Lock()
-
-	id = s.getExpandedID(id)
-
-	logger.Debugf("Adding service=%s id=%s", service.Name, id)
-
-	s.services[id] = &service
 
 	for domain := range service.ListDomains(s.config.Domain.String(), true) {
 		if dns.IsSubDomain(s.config.Domain.String(), domain) {
@@ -137,21 +115,15 @@ func (s *DNSServer) AddService(id string, service Service) error {
 		s.mux.HandleFunc(domain, s.handleRequest)
 	}
 
-	logger.Infof("Added service id=%s name=%s", id, service.Name)
-
 	return nil
 }
 
 // RemoveService removes a new container and thus DNS records
-func (s *DNSServer) RemoveService(id string) error {
-	id = s.getExpandedID(id)
-
-	service, err := s.GetService(id)
-	if err != nil {
-		return errors.New("No such service: " + id)
+func (s *DNSServer) RemoveService(id string, service *Service) error {
+	if len(service.IPs) == 0 {
+		logger.Warningf("Service '%s' ignored: No IP provided:", id, id)
+		return nil
 	}
-
-	logger.Debugf("Removing service id=%s name=%s", id, service.Name)
 
 	defer s.lock.Unlock()
 	s.lock.Lock()
@@ -165,96 +137,7 @@ func (s *DNSServer) RemoveService(id string) error {
 		s.mux.HandleRemove(domain)
 	}
 
-	delete(s.services, id)
-
-	logger.Infof("Removed service id=%s name=%s", id, service.Name)
-
 	return nil
-}
-
-// GetService reads a service from the repository
-func (s *DNSServer) GetService(id string) (Service, error) {
-	defer s.lock.RUnlock()
-	s.lock.RLock()
-
-	id = s.getExpandedID(id)
-	if s, ok := s.services[id]; ok {
-		return *s, nil
-	}
-
-	// Check for a pa
-	return *new(Service), errors.New("No such service: " + id)
-}
-
-// GetAllServices reads all services from the repository
-func (s *DNSServer) GetAllServices() map[string]Service {
-	defer s.lock.RUnlock()
-	s.lock.RLock()
-
-	list := make(map[string]Service, len(s.services))
-	for id, service := range s.services {
-		list[id] = *service
-	}
-
-	return list
-}
-
-// ChanSuffix Suffixes all items in a string channel with a given suffix
-func ChanSuffix(in chan string, suffix string, orig bool) chan string {
-	out := make(chan string)
-	go func() {
-		for domain := range in {
-			if domain == "" {
-				continue
-			}
-
-			//logger.Debugf("aliasing domain=%s with suffix=%s", domain, suffix)
-			out <- domain + suffix
-			if orig {
-				out <- domain
-			}
-		}
-		close(out)
-	}()
-	return out
-}
-
-func (service *Service) ListDomains(suffix string, end bool) chan string {
-	gen := func() chan string {
-		out := make(chan string)
-		go func() {
-			// Service name
-			out <- service.Name
-
-			// Set aliases for this service (ie from labels)
-			for _, alias := range service.Aliases {
-				out <- alias
-			}
-
-			close(out)
-		}()
-		return out
-	}
-
-	// Primordial goo
-	c := gen()
-
-	if service.Image != "" {
-		// If we happen to know our image, add as suffix
-		c = ChanSuffix(c, utils.DomainJoin("", service.Image), true)
-	}
-
-	// Domain suffix
-	if suffix != "" {
-		c = ChanSuffix(c, utils.DomainJoin("", suffix), true)
-	}
-
-	if end {
-		// All must end with a period.
-		c = ChanSuffix(c, ".", false)
-	}
-
-	return c
 }
 
 func (s *DNSServer) handleForward(w dns.ResponseWriter, r *dns.Msg) {
@@ -384,7 +267,7 @@ func (s *DNSServer) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 
 	logger.Debugf("DNS query '%s' from remote '%s'", query, w.RemoteAddr())
 
-	for service := range s.QueryServices(query) {
+	for service := range (*s.list).QueryServices(query) {
 		var rr dns.RR
 		switch r.Question[0].Qtype {
 		case dns.TypeA:
@@ -490,84 +373,12 @@ func (s *DNSServer) handleReverseRequest(w dns.ResponseWriter, r *dns.Msg) {
 }
 
 func (s *DNSServer) QueryIP(query string) chan *Service {
-	c := make(chan *Service, 3)
 	reversedIP := strings.TrimSuffix(query, ".in-addr.arpa")
-	ip := strings.Join(utils.Reverse(dns.SplitDomainName(reversedIP)), ".")
+	ipstr := strings.Join(utils.Reverse(dns.SplitDomainName(reversedIP)), ".")
 
-	go func() {
-		defer s.lock.RUnlock()
-		s.lock.RLock()
+	ip := net.ParseIP(ipstr)
 
-		for _, service := range s.services {
-			if service.IPs[0].String() == ip {
-				c <- service
-			}
-		}
-
-		close(c)
-	}()
-
-	return c
-}
-
-func (s *Service) hasPrefixMatch(query string, suffix string) string {
-	squery := dns.SplitDomainName(query)
-
-	for domain := range s.ListDomains(suffix, false) {
-		sdomain := dns.SplitDomainName(domain)
-		if isPrefixQuery(squery, sdomain) {
-			return domain
-		}
-	}
-	return ""
-}
-
-// QueryServices queries services
-func (s *DNSServer) QueryServices(query string) chan *Service {
-	c := make(chan *Service, 3)
-
-	go func() {
-		suffix := s.config.Domain.String()
-
-		defer s.lock.RUnlock()
-		s.lock.RLock()
-
-		for _, service := range s.services {
-			if domain := service.hasPrefixMatch(query, suffix); domain != "" {
-				c <- service
-			}
-		}
-
-		close(c)
-	}()
-
-	return c
-}
-
-// Checks for a partial match for container SHA and outputs it if found.
-func (s *DNSServer) getExpandedID(in string) (out string) {
-	out = in
-
-	// Hard to make a judgement on small image names.
-	if len(in) < 4 {
-		return
-	}
-
-	if isHex, _ := regexp.MatchString("^[0-9a-f]+$", in); !isHex {
-		return
-	}
-
-	for id := range s.services {
-		if len(id) == 64 {
-			if isHex, _ := regexp.MatchString("^[0-9a-f]+$", id); isHex {
-				if strings.HasPrefix(id, in) {
-					out = id
-					return
-				}
-			}
-		}
-	}
-	return
+	return (*s.list).QueryServicesByIP(ip)
 }
 
 // TTL is used from config so that not-found result responses are not cached
