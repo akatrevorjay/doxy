@@ -1,5 +1,5 @@
-hash: 8dc54caa6a6f6df3189d028d7ddb67375128852251bd50996d30aca1590d37d8
-updated: 2017-05-11T16:26:03.058014974-07:00
+hash: c3ace969ce7ddae133f0e0d30acb10f026952636b27b31d89aa7067944eb37f9
+updated: 2017-05-12T20:11:23.647580388-07:00
 imports:
 - name: github.com/alecthomas/template
   version: a0175ee3bccc567396460bf5acd36800cb10c49c
@@ -48,8 +48,6 @@ imports:
   version: ce2922f643c8fd76b46cadc7f404a06282678b34
 - name: github.com/miekg/dns
   version: 5d001d020961ae1c184f9f8152fdc73810481677
-- name: github.com/olebedev/emitter
-  version: 9110dbae3d07cb26c2993dbf3bdbd0aad98329f9
 - name: github.com/op/go-logging
   version: b2cb9fa56473e98db8caba80237377e83fe44db5
 - name: github.com/opencontainers/runc
