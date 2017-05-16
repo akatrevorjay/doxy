@@ -7,7 +7,6 @@ services:
     container_name: doxy
     command: doxy -D :53 -H :80 -I :443
     #restart: always
-    userns_mode: host
 
     volumes:
       - .:/go/src/github.com/akatrevorjay/doxy
