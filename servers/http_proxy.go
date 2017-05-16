@@ -68,50 +68,69 @@ func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider) (*ProxyHttpSe
 	proxy := goproxy.NewProxyHttpServer()
 
 	proxy.Verbose = c.Verbose
-	//proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 
 	proxy.NonproxyHandler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		logger.Debugf("NonproxyHandler w=%v req=%v", w, req)
+
 		if req.Host == "" {
 			fmt.Fprintln(w, "Cannot handle requests without Host header, e.g., HTTP 1.0")
 			return
 		}
+
+		host, port, err := net.SplitHostPort(req.URL.Host)
+		if err != nil {
+			host, port = req.URL.Host, "80"
+		}
+
+		ok := false
+		for svc := range (*s.list).QueryServices(host) {
+			host = svc.IPs[0].String()
+
+			ok = true
+			break
+		}
+
+		if !ok {
+			logger.Errorf("Service not available by name: %v", host)
+			//req.Write([]byte("HTTP/1.1 500 Cannot reach destination\r\n\r\n"))
+			//req.Close = true
+			proxy.ServeHTTP(w, nil)
+			return
+		}
+
+		// trim off any trailing dot
+		if host[len(host)-1] == '.' {
+			host = host[:len(host)-1]
+		}
+
+		remoteHostport := net.JoinHostPort(host, port)
+
+		utils.Dump(req)
+		utils.Dump(remoteHostport)
+
+		logger.Debugf("Service available by name: %v", host)
+
+		// TODO Look up from DNS
+		//remote, err := connectDial(proxy, "tcp", remoteHostport
+		//orPanic(err)
+
+		req.URL.Host = host
+
 		req.URL.Scheme = "http"
-		req.URL.Host = req.Host
+		//req.URL.Host = req.Host
+
 		proxy.ServeHTTP(w, req)
 	})
 
-	proxy.OnRequest(goproxy.ReqHostMatches(regexp.MustCompile("^.*$"))).
-		HandleConnect(goproxy.AlwaysMitm)
+	//proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+
+	//proxy.OnRequest(goproxy.ReqHostMatches(regexp.MustCompile("^.*$"))).
+	//    HandleConnect(goproxy.AlwaysMitm)
 
 	proxy.OnRequest(goproxy.ReqHostMatches(regexp.MustCompile("^.*:80$"))).
 		HijackConnect(func(req *http.Request, client net.Conn, ctx *goproxy.ProxyCtx) {
-			defer func() {
-				if e := recover(); e != nil {
-					ctx.Logf("error connecting to remote: %v", e)
-					client.Write([]byte("HTTP/1.1 500 Cannot reach destination\r\n\r\n"))
-				}
-				client.Close()
-			}()
-			clientBuf := bufio.NewReadWriter(bufio.NewReader(client), bufio.NewWriter(client))
+			logger.Debugf("OnRequest match=.*:80 req=%v client=%v ctx=%v", req, client, ctx)
 
-			remote, err := connectDial(proxy, "tcp", req.URL.Host)
-			orPanic(err)
-
-			remoteBuf := bufio.NewReadWriter(bufio.NewReader(remote), bufio.NewWriter(remote))
-			for {
-				req, err := http.ReadRequest(clientBuf.Reader)
-				orPanic(err)
-				orPanic(req.Write(remoteBuf))
-				orPanic(remoteBuf.Flush())
-				resp, err := http.ReadResponse(remoteBuf.Reader, req)
-				orPanic(err)
-				orPanic(resp.Write(clientBuf.Writer))
-				orPanic(clientBuf.Flush())
-			}
-		})
-
-	proxy.OnRequest(goproxy.ReqHostMatches(regexp.MustCompile("^.*:443$"))).
-		HijackConnect(func(req *http.Request, client net.Conn, ctx *goproxy.ProxyCtx) {
 			defer func() {
 				if e := recover(); e != nil {
 					ctx.Logf("error connecting to remote: %v", e)
@@ -135,6 +154,10 @@ func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider) (*ProxyHttpSe
 			}
 
 			if !ok {
+				logger.Errorf("Service not available by name: %v", host)
+				//req.Write([]byte("HTTP/1.1 500 Cannot reach destination\r\n\r\n"))
+				//req.Close = true
+				//proxy.ServeHTTP(w, nil)
 				return
 			}
 
@@ -147,6 +170,71 @@ func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider) (*ProxyHttpSe
 
 			utils.Dump(req)
 			utils.Dump(remoteHostport)
+
+			logger.Debugf("Service available by name: %v", host)
+
+			// TODO Look up from DNS
+			remote, err := connectDial(proxy, "tcp", remoteHostport)
+			orPanic(err)
+
+			remoteBuf := bufio.NewReadWriter(bufio.NewReader(remote), bufio.NewWriter(remote))
+			for {
+				req, err := http.ReadRequest(clientBuf.Reader)
+				orPanic(err)
+				orPanic(req.Write(remoteBuf))
+				orPanic(remoteBuf.Flush())
+				resp, err := http.ReadResponse(remoteBuf.Reader, req)
+				orPanic(err)
+				orPanic(resp.Write(clientBuf.Writer))
+				orPanic(clientBuf.Flush())
+			}
+		})
+
+	proxy.OnRequest(goproxy.ReqHostMatches(regexp.MustCompile("^.*:443$"))).
+		HijackConnect(func(req *http.Request, client net.Conn, ctx *goproxy.ProxyCtx) {
+			logger.Debugf("OnRequest match=.*:443 req=%v client=%v ctx=%v", req, client, ctx)
+
+			defer func() {
+				if e := recover(); e != nil {
+					ctx.Logf("error connecting to remote: %v", e)
+					client.Write([]byte("HTTP/1.1 500 Cannot reach destination\r\n\r\n"))
+				}
+				client.Close()
+			}()
+			clientBuf := bufio.NewReadWriter(bufio.NewReader(client), bufio.NewWriter(client))
+
+			host, port, err := net.SplitHostPort(req.URL.Host)
+			if err != nil {
+				host, port = req.URL.Host, "80"
+			}
+
+			ok := false
+			for svc := range (*s.list).QueryServices(host) {
+				host = svc.IPs[0].String()
+
+				ok = true
+				break
+			}
+
+			if !ok {
+				logger.Errorf("Service not available by name: %v", host)
+				//req.Write([]byte("HTTP/1.1 500 Cannot reach destination\r\n\r\n"))
+				//req.Close = true
+				//proxy.ServeHTTP(w, nil)
+				return
+			}
+
+			// trim off any trailing dot
+			if host[len(host)-1] == '.' {
+				host = host[:len(host)-1]
+			}
+
+			remoteHostport := net.JoinHostPort(host, port)
+
+			utils.Dump(req)
+			utils.Dump(remoteHostport)
+
+			logger.Debugf("Service available by name: %v", host)
 
 			// TODO Look up from DNS
 			remote, err := connectDial(proxy, "tcp", remoteHostport)
@@ -179,8 +267,6 @@ func (s *ProxyHttpServer) AddService(id string, service *Service) error {
 	for domain := range service.ListDomains(s.config.Domain.String(), false) {
 		logger.Debugf("http/s domain=%s for service=%s", domain, service.Name)
 		//s.AddProxyDomain(domain)
-
-
 	}
 
 	return nil
@@ -230,18 +316,52 @@ func (s *ProxyHttpServer) Start() error {
 				if err != nil {
 					logger.Errorf("Error accepting new connection - %v", err)
 				}
+
 				if tlsConn.Host() == "" {
 					logger.Errorf("Cannot support non-SNI enabled clients")
 					return
 				}
 
+				host, port, err := net.SplitHostPort(tlsConn.Host())
+				if err != nil {
+					host, port = tlsConn.Host(), "80"
+				}
+
+				ok := false
+				for svc := range (*s.list).QueryServices(host) {
+					host = svc.IPs[0].String()
+
+					ok = true
+					break
+				}
+
+				if !ok {
+					logger.Errorf("Service not available by name: %v", host)
+					//req.Write([]byte("HTTP/1.1 500 Cannot reach destination\r\n\r\n"))
+					//req.Close = true
+					//proxy.ServeHTTP(w, nil)
+					return
+				}
+
+				// trim off any trailing dot
+				if host[len(host)-1] == '.' {
+					host = host[:len(host)-1]
+				}
+
+				remoteHostport := net.JoinHostPort(host, port)
+
+				//utils.Dump(tlsConn)
+				utils.Dump(remoteHostport)
+
+				logger.Debugf("Service available by name: %v", host)
+
 				connectReq := &http.Request{
 					Method: "CONNECT",
 					URL: &url.URL{
-						Opaque: tlsConn.Host(),
-						Host:   net.JoinHostPort(tlsConn.Host(), "443"),
+						Opaque: host,
+						Host:   remoteHostport,
 					},
-					Host:   tlsConn.Host(),
+					Host:   host,
 					Header: make(http.Header),
 				}
 

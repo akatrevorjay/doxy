@@ -13,8 +13,10 @@ services:
       - .:/go/src/github.com/akatrevorjay/doxy
       - /var/run/docker.sock:/run/docker.sock
 
-    networks:
-      - doxy
+    network_mode: host
+    #networks:
+    #  - doxy
+    #  #- host
 
     #healthcheck:
     #  test: ["CMD", "curl", "-f", "http://localhost"]
@@ -40,8 +42,10 @@ services:
       #- 10.69.69.2:80:80/tcp
       #- 10.69.69.2:443:443/tcp
 
-networks:
-  doxy:
-    ipam:
-      config:
-        - subnet: 10.69.69.0/30
+#networks:
+#  doxy:
+#    ipam:
+#      config:
+#        - subnet: 10.69.69.0/30
+#  #host:
+#  #  external: true

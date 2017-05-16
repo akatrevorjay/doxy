@@ -20,13 +20,13 @@ import (
 
 // DNSServer represents a DNS server
 type DNSServer struct {
-	config     *utils.Config
+	config    *utils.Config
 	serverUdp *dns.Server
 	serverTcp *dns.Server
-	mux        *dns.ServeMux
-	lock       *sync.RWMutex
-	client     *dns.Client
-	list       *ServiceListProvider
+	mux       *dns.ServeMux
+	lock      *sync.RWMutex
+	client    *dns.Client
+	list      *ServiceListProvider
 }
 
 // NewDNSServer create a new DNSServer

@@ -1,20 +1,10 @@
-/* docker.go
- *
- * Copyright (C) 2016 Alexandre ACEBEDO
- *
- * This software may be modified and distributed under the terms
- * of the MIT license.  See the LICENSE file for details.
- */
-
 package core
 
 import (
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"net"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/akatrevorjay/doxy/servers"
@@ -27,12 +17,6 @@ import (
 	"github.com/vdemeester/docker-events"
 	"golang.org/x/net/context"
 )
-
-func orPanic(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
 
 // DckerManager is the entrypoint to the docker daemon
 type DockerManager struct {
@@ -65,15 +49,15 @@ func (d *DockerManager) Start() error {
 	startHandler := func(m eventtypes.Message) {
 		logger.Debugf("Started container '%s'", m.ID)
 
-		service, err := d.createService(m.ID)
+		svc, err := d.createService(m.ID)
 		if err != nil {
 			logger.Errorf("%s", err)
 			return
 		}
 
-		err = (*d.list).AddService(m.ID, service)
+		err = (*d.list).AddService(m.ID, svc)
 		if err != nil {
-			logger.Errorf("Failed to add service id=%s: %s", m.ID, err.Error())
+			logger.Errorf("Failed to add svc id=%s: %s", m.ID, err.Error())
 			return
 		}
 	}
@@ -88,7 +72,7 @@ func (d *DockerManager) Start() error {
 
 		err := (*d.list).RemoveService(m.ID)
 		if err != nil {
-			logger.Errorf("Failed to remove service id=%s: %s", m.ID, err.Error())
+			logger.Errorf("Failed to remove svc id=%s: %s", m.ID, err.Error())
 			return
 		}
 	}
@@ -101,18 +85,18 @@ func (d *DockerManager) Start() error {
 
 			err := (*d.list).RemoveService(oldName)
 			if err != nil {
-				logger.Errorf("Failed to remove renamed service id=%s: %s", m.ID, err.Error())
+				logger.Errorf("Failed to remove renamed svc id=%s: %s", m.ID, err.Error())
 			}
 
-			service, err := d.createService(m.ID)
+			svc, err := d.createService(m.ID)
 			if err != nil {
-				logger.Errorf("Failed to get renamed service id=%s: %s", m.ID, err.Error())
+				logger.Errorf("Failed to get renamed svc id=%s: %s", m.ID, err.Error())
 				return
 			}
 
-			err = (*d.list).AddService(m.ID, service)
+			err = (*d.list).AddService(m.ID, svc)
 			if err != nil {
-				logger.Errorf("Failed to add renamed service id=%s: %s", m.ID, err.Error())
+				logger.Errorf("Failed to add renamed svc id=%s: %s", m.ID, err.Error())
 			}
 		}
 	}
@@ -123,7 +107,7 @@ func (d *DockerManager) Start() error {
 		if d.config.All {
 			err := (*d.list).RemoveService(m.ID)
 			if err != nil {
-				logger.Errorf("Failed to remove service id=%s: %s", m.ID, err.Error())
+				logger.Errorf("Failed to remove svc id=%s: %s", m.ID, err.Error())
 			}
 		}
 	}
@@ -152,15 +136,21 @@ func (d *DockerManager) AddExisting() error {
 	}
 
 	for _, container := range containers {
-		service, err := d.createService(container.ID)
+		// Skip existing
+		_, err := (*d.list).GetService(container.ID)
+		if err != nil {
+			continue
+		}
+
+		svc, err := d.createService(container.ID)
 		if err != nil {
 			logger.Errorf("%s", err)
 			continue
 		}
 
-		err = (*d.list).AddService(container.ID, service)
+		err = (*d.list).AddService(container.ID, svc)
 		if err != nil {
-			logger.Errorf("Failed to add service id=%s: %s", container.ID, err)
+			logger.Errorf("Failed to add svc id=%s: %s", container.ID, err)
 		}
 	}
 
@@ -178,17 +168,17 @@ func (d *DockerManager) createService(id string) (*servers.Service, error) {
 		return nil, err
 	}
 
-	service, err := servers.NewService()
+	svc, err := servers.NewService()
 	orPanic(err)
-	service.Aliases = make([]string, 0)
+	svc.Aliases = make([]string, 0)
 
-	service.Image = getImageName(desc.Config.Image)
-	if imageNameIsSHA(service.Image, desc.Image) {
-		logger.Warningf("Warning: Can't route %s, image %s is not a tag.", id[:10], service.Image)
-		service.Image = ""
+	svc.Image = getImageName(desc.Config.Image)
+	if imageNameIsSHA(svc.Image, desc.Image) {
+		logger.Warningf("Warning: Can't route %s, image %s is not a tag.", id[:10], svc.Image)
+		svc.Image = ""
 	}
-	service.Name = cleanContainerName(desc.Name)
-	service.Primary = utils.DomainJoin(service.Name, d.config.Domain.String(), "")
+	svc.Name = cleanContainerName(desc.Name)
+	svc.Primary = utils.DomainJoin(svc.Name, d.config.Domain.String(), "")
 
 	switch len(desc.NetworkSettings.Networks) {
 	case 0:
@@ -197,7 +187,7 @@ func (d *DockerManager) createService(id string) (*servers.Service, error) {
 		for _, value := range desc.NetworkSettings.Networks {
 			ip := net.ParseIP(value.IPAddress)
 			if ip != nil {
-				service.IPs = append(service.IPs, ip)
+				svc.IPs = append(svc.IPs, ip)
 			}
 		}
 	}
@@ -207,51 +197,70 @@ func (d *DockerManager) createService(id string) (*servers.Service, error) {
 		case "tcp":
 			switch src.Port() {
 			case "80":
-				service.HttpPort = src.Port()
+				svc.HttpPort = src.Port()
 				break
 			case "8000", "8080":
-				service.HttpPort = src.Port()
+				svc.HttpPort = src.Port()
 			}
 		}
 	}
 
-	service.Ports = desc.NetworkSettings.Ports
+	svc.Ports = desc.NetworkSettings.Ports
 
-	//applyLabelOverrides(&service, desc.Config.Labels, d.config.LabelPrefix)
-	service = applyLabelOverrides(service, desc.Config.Labels, d.config.Name)
+	env := splitEnv(desc.Config.Env)
+	svc.ApplyEnvOverrides(env, "SERVICE")
+	svc.ApplyEnvOverrides(env, d.config.Name)
 
-	service = applyEnvOverrides(service, splitEnv(desc.Config.Env), "SERVICE")
-	service = applyEnvOverrides(service, splitEnv(desc.Config.Env), d.config.Name)
+	//svc.ApplyLabelOverrides(desc.Config.Labels, d.config.LabelPrefix)
+	svc.ApplyLabelOverrides(desc.Config.Labels, d.config.Name)
 
-	if service == nil {
-		return nil, errors.New("Skipping " + id)
+	if svc.Ignore {
+		return nil, errors.New("Ignoring " + id)
 	}
 
 	if d.config.CreateAlias {
-		aliases, _ := genAliases(service)
-		service.Aliases = append(service.Aliases, aliases...)
+		composeLabels := filterComposeLabels(desc.Config.Labels)
+
+		aliases := genComposeAliases(composeLabels)
+		if len(aliases) > 0 {
+			svc.Aliases = append(svc.Aliases, aliases...)
+		}
 	}
 
-	logger.Infof("Created service: %s", service)
+	logger.Infof("Created svc: %s", svc)
 
-	return service, nil
+	return svc, nil
 }
 
-func genAliases(service *servers.Service) (out []string, err error) {
-	// Compose style: `project_service_idx` gets churned into:
-	// - i.s.p
-	// - s.p
-	// Eventually this should be done from the tags compose sets.
-	parts := strings.Split(service.Name, "_")
-	if len(parts) == 3 {
-		// i.s.p
-		out = append(out, utils.DomainJoin(utils.Reverse(parts)...))
+func filterComposeLabels(labels map[string]string) map[string]string {
+	return utils.FilterMappingByPrefix(labels, "com.docker.compose.", true)
+}
 
-		// s.p
-		out = append(out, utils.DomainJoin(utils.Reverse(parts[:len(parts)-1])...))
+func genComposeAliases(composeLabels map[string]string) []string {
+	aliases := make([]string, 0)
+
+	required := []string{"project", "service", "container-number"}
+	for _, req := range required {
+		_, ok := composeLabels[req]
+		if !ok {
+			logger.Errorf("Missing required key %v", req)
+			return aliases
+		}
 	}
 
-	return out, err
+	idx := composeLabels["container-number"]
+	service := composeLabels["service"]
+	project := composeLabels["project"]
+
+	aliases = append(
+		aliases,
+		// i.s.p
+		utils.DomainJoin(idx, service, project),
+		// s.p
+		utils.DomainJoin(service, project),
+	)
+
+	return aliases
 }
 
 func getImageName(tag string) string {
@@ -292,90 +301,4 @@ func splitEnv(in []string) (out map[string]string) {
 		out[strings.Trim(parts[0], " ")] = value
 	}
 	return
-}
-
-func applyOverride(in *servers.Service, k string, v string) *servers.Service {
-	mrclean, err := regexp.Compile("[^a-zA-Z0-9]+")
-	// Go is so great! I love checking this. That's enterprise.
-	if err != nil {
-		logger.Fatal(err)
-	}
-	cleanedK := mrclean.ReplaceAllString(strings.ToLower(k), "")
-
-	var region string
-	switch cleanedK {
-	case "ignore":
-		return nil
-
-	case "alias", "aliases":
-		in.Aliases = strings.Split(v, ",")
-
-	case "name":
-		in.Name = v
-
-	case "tags":
-		if len(v) == 0 {
-			in.Name = ""
-		} else {
-			in.Name = strings.Split(v, ",")[0]
-		}
-
-	case "image":
-		in.Image = v
-
-	case "ttl":
-		if ttl, err := strconv.Atoi(v); err == nil {
-			in.TTL = ttl
-		}
-
-	case "region":
-		region = v
-
-	case "ip", "ipaddr", "ipaddress":
-		ipAddr := net.ParseIP(v)
-		if ipAddr != nil {
-			in.IPs = in.IPs[:0]
-			in.IPs = append(in.IPs, ipAddr)
-		}
-
-	case "prefix":
-		addrs := make([]net.IP, 0)
-		for _, value := range in.IPs {
-			if strings.HasPrefix(value.String(), v) {
-				addrs = append(addrs, value)
-			}
-		}
-		if len(addrs) == 0 {
-			logger.Warningf("The prefix '%s' didn't match any IP addresses of service '%s', the service will be ignored", v, in.Name)
-		}
-		in.IPs = addrs
-	}
-
-	if len(region) > 0 {
-		in.Image = in.Image + "." + region
-	}
-	return in
-}
-
-func applyOverrides(svc *servers.Service, mapping map[string]string, prefix string) *servers.Service {
-	var name string
-	for k, v := range mapping {
-		if !strings.HasPrefix(k, prefix) {
-			continue
-		}
-		name = k[len(prefix):]
-
-		svc = applyOverride(svc, name, v)
-	}
-	return svc
-}
-
-func applyLabelOverrides(svc *servers.Service, labels map[string]string, prefix string) *servers.Service {
-	prefix += "."
-	return applyOverrides(svc, labels, prefix)
-}
-
-func applyEnvOverrides(svc *servers.Service, env map[string]string, prefix string) *servers.Service {
-	prefix = fmt.Sprintf("%s_", strings.ToUpper(prefix))
-	return applyOverrides(svc, env, prefix)
 }
