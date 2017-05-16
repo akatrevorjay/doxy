@@ -6,7 +6,7 @@ import (
 
 // TODO This should be a channel.
 // FilterMappingByKeyPrefix Filters a mapping by a key prefix
-func FilterMappingByKeyPrefix(in map[string]string, prefix string, strip bool) (map[string]string) {
+func FilterMappingByKeyPrefix(in map[string]string, prefix string, strip bool) map[string]string {
 	out := make(map[string]string)
 
 	for k, v := range in {

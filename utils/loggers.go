@@ -16,7 +16,7 @@ import (
 // InitLoggers initialize loggers
 func InitLoggers(verbosity int) (err error) {
 	var format = logging.MustStringFormatter(
-		`%{color}%{time:15:04:05.000} %{longfunc}: %{color:bold}%{message} %{color:reset}%{color}@%{shortfile} %{color}#%{level}%{color:reset}`,
+		`%{color}%{time:15:04:05.000} %{module} %{longfunc} %{color:bold}%{message} %{color:reset}%{color}@%{shortfile} %{color}#%{level}%{color:reset}`,
 	)
 
 	backend := logging.NewLogBackend(os.Stderr, "", 0)

@@ -38,7 +38,7 @@ declare -a osx=()
 os-type os
 declare -n stack="$os"
 
-ns="${1:-10.69.69.2}"
+ns="${1:-127.0.0.69}"
 tld="${2:-docker}"
 
 function ensure-dnsdock {

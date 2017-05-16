@@ -15,7 +15,7 @@ type TestEventHandler struct {
 func (t *TestEventHandler) EventLoop(ch chan Event) {
 	for event := range ch {
 		if test, ok := event.(*TestEvent); ok && test.myNum == 42 {
-		event.(*TestEvent).ch <- true
+			event.(*TestEvent).ch <- true
 		} else {
 			event.(*TestEvent).ch <- false
 		}

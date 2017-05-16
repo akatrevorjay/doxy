@@ -3,10 +3,10 @@ package core
 import (
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net"
 	"regexp"
 	"strings"
-	"fmt"
 
 	"golang.org/x/net/context"
 
@@ -206,7 +206,7 @@ func (d *DockerManager) createService(id string) (*servers.Service, error) {
 
 	svc.Ports = desc.NetworkSettings.Ports
 
-	for src, _ := range desc.NetworkSettings.Ports {
+	for src := range desc.NetworkSettings.Ports {
 		switch src.Proto() {
 		case "tcp":
 			switch src.Port() {
@@ -325,4 +325,3 @@ func genComposeAliases(composeLabels map[string]string) []string {
 
 	return aliases
 }
-

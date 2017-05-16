@@ -222,7 +222,7 @@ func TestDNSRequestMatch(t *testing.T) {
 		t.Log(input.query, input.domain)
 
 		actual := 0
-		for _ = range server.queryServices(input.query) {
+		for range server.queryServices(input.query) {
 			actual++
 		}
 
@@ -265,7 +265,7 @@ func TestDNSRequestMatchNamesWithDots(t *testing.T) {
 
 		t.Log(input.query, input.domain)
 		actual := 0
-		for _ = range server.queryServices(input.query) {
+		for range server.queryServices(input.query) {
 			actual++
 		}
 

@@ -9,9 +9,9 @@
 package utils
 
 import (
+	"fmt"
 	"os"
 	"strings"
-	"fmt"
 )
 
 // Domain represents a domain

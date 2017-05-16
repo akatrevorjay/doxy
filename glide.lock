@@ -1,6 +1,12 @@
 hash: c3ace969ce7ddae133f0e0d30acb10f026952636b27b31d89aa7067944eb37f9
-updated: 2017-05-15T17:02:27.727443529-07:00
+updated: 2017-05-23T13:35:49.487641928-07:00
 imports:
+- name: github.com/aacebedo/dnsdock
+  version: 1b558dc15527c149fc540f8934116e7791a8b994
+  subpackages:
+  - src/core
+  - src/servers
+  - src/utils
 - name: github.com/alecthomas/template
   version: a0175ee3bccc567396460bf5acd36800cb10c49c
   subpackages:
@@ -40,6 +46,8 @@ imports:
   version: f2d77a61e3c169b43402a0a1e84f06daf29b8190
 - name: github.com/elazarl/goproxy
   version: aacba83f36a55ac31cbb71c06547a328c0cd1604
+- name: github.com/gorilla/context
+  version: aed02d124ae4a0e94fea4541c8effd05bf0c8296
 - name: github.com/gorilla/mux
   version: 392c28fe23e1c45ddba891b0320b3b5df220beea
 - name: github.com/inconshreveable/go-vhost
@@ -55,19 +63,18 @@ imports:
   subpackages:
   - libcontainer/user
 - name: github.com/Sirupsen/logrus
-  version: 55eb11d21d2a31a3cc93838241d04800f52e823d
-  subpackages:
-  - formatters/logstash
+  version: f3cfb454f4c209e6668c95216c4744b8fddb2356
 - name: github.com/vdemeester/docker-events
   version: be74d4929ec1ad118df54349fda4b0cba60f849b
 - name: golang.org/x/net
-  version: 4876518f9e71663000c348837735820161a42df7
+  version: b6d7b1396ec874c3b00f6c84cd4301a17c56c8ed
   subpackages:
   - context
   - proxy
 - name: golang.org/x/sys
   version: 62bee037599929a6e9146f29d10dd5208c43507d
   subpackages:
+  - unix
   - windows
 - name: gopkg.in/alecthomas/kingpin.v2
   version: 7f0871f2e17818990e4eed73f9b5c2f429501228

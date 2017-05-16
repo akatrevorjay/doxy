@@ -1,13 +1,11 @@
 package servers
 
 import (
-	//"errors"
 	"fmt"
 	"net"
 	"regexp"
 	"strconv"
 	"strings"
-	//"sync"
 
 	"github.com/akatrevorjay/doxy/utils"
 	"github.com/docker/go-connections/nat"
@@ -26,13 +24,13 @@ type Service struct {
 	Primary string
 	Aliases []string
 
-	IPs []net.IP
+	IPs   []net.IP
 	Ports nat.PortMap
 
 	HttpPort            string
-	HttpsPort          string
-	HttpsValidateCert  bool
-	ForwardHttpsToHttp bool
+	HttpsPort           string
+	HttpsValidateCert   bool
+	ForwardHttpsToHttp  bool
 	RedirectHttpToHttps bool
 }
 
