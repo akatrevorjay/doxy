@@ -19,7 +19,6 @@ import (
 	eventtypes "github.com/docker/engine-api/types/events"
 
 	"github.com/vdemeester/docker-events"
-
 )
 
 // DckerManager is the entrypoint to the docker daemon
@@ -50,78 +49,12 @@ func (d *DockerManager) Start() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	d.cancel = cancel
 
-	startHandler := func(m eventtypes.Message) {
-		logger.Debugf("Started container '%s'", m.ID)
-
-		svc, err := d.createService(m.ID)
-		if err != nil {
-			logger.Errorf("%s", err)
-			return
-		}
-
-		err = (*d.list).AddService(m.ID, svc)
-		if err != nil {
-			logger.Errorf("Failed to add svc id=%s: %s", m.ID, err.Error())
-			return
-		}
-	}
-
-	stopHandler := func(m eventtypes.Message) {
-		logger.Debugf("Stopped container '%s'", m.ID)
-
-		if d.config.All {
-			logger.Debugf("Stopped container '%s' not removed as --all argument is true", m.ID)
-			return
-		}
-
-		err := (*d.list).RemoveService(m.ID)
-		if err != nil {
-			logger.Errorf("Failed to remove svc id=%s: %s", m.ID, err.Error())
-			return
-		}
-	}
-
-	renameHandler := func(m eventtypes.Message) {
-		oldName, ok := m.Actor.Attributes["oldName"]
-		name, ok2 := m.Actor.Attributes["oldName"]
-		if ok && ok2 {
-			logger.Debugf("Renamed container '%s' => '%s'", oldName, name)
-
-			err := (*d.list).RemoveService(oldName)
-			if err != nil {
-				logger.Errorf("Failed to remove renamed svc id=%s: %s", m.ID, err.Error())
-			}
-
-			svc, err := d.createService(m.ID)
-			if err != nil {
-				logger.Errorf("Failed to get renamed svc id=%s: %s", m.ID, err.Error())
-				return
-			}
-
-			err = (*d.list).AddService(m.ID, svc)
-			if err != nil {
-				logger.Errorf("Failed to add renamed svc id=%s: %s", m.ID, err.Error())
-			}
-		}
-	}
-
-	destroyHandler := func(m eventtypes.Message) {
-		logger.Debugf("Destroyed container '%s'", m.ID)
-
-		if d.config.All {
-			err := (*d.list).RemoveService(m.ID)
-			if err != nil {
-				logger.Errorf("Failed to remove svc id=%s: %s", m.ID, err.Error())
-			}
-		}
-	}
-
 	eventHandler := events.NewHandler(events.ByAction)
 
-	eventHandler.Handle("start", startHandler)
-	eventHandler.Handle("die", stopHandler)
-	eventHandler.Handle("destroy", destroyHandler)
-	eventHandler.Handle("rename", renameHandler)
+	eventHandler.Handle("start", d.startHandler)
+	eventHandler.Handle("die", d.stopHandler)
+	eventHandler.Handle("destroy", d.destroyHandler)
+	eventHandler.Handle("rename", d.renameHandler)
 
 	events.MonitorWithHandler(ctx, d.client, types.EventsOptions{}, eventHandler)
 
@@ -140,7 +73,7 @@ func (d *DockerManager) AddExisting() error {
 	for _, container := range containers {
 		// Skip existing
 		_, err := (*d.list).GetService(container.ID)
-		if err != nil {
+		if err == nil {
 			continue
 		}
 
@@ -164,6 +97,80 @@ func (d *DockerManager) Stop() {
 	d.cancel()
 }
 
+//
+// Docker event handlers
+//
+
+func (d *DockerManager) startHandler(m eventtypes.Message) {
+	logger.Debugf("Started container '%s'", m.ID)
+
+	svc, err := d.createService(m.ID)
+	if err != nil {
+		logger.Errorf("%s", err)
+		return
+	}
+
+	err = (*d.list).AddService(m.ID, svc)
+	if err != nil {
+		logger.Errorf("Failed to add svc id=%s: %s", m.ID, err.Error())
+		return
+	}
+}
+
+func (d *DockerManager) stopHandler(m eventtypes.Message) {
+	logger.Debugf("Stopped container '%s'", m.ID)
+
+	if d.config.All {
+		logger.Debugf("Stopped container '%s' not removed as --all argument is true", m.ID)
+		return
+	}
+
+	err := (*d.list).RemoveService(m.ID)
+	if err != nil {
+		logger.Errorf("Failed to remove svc id=%s: %s", m.ID, err.Error())
+		return
+	}
+}
+
+func (d *DockerManager) renameHandler(m eventtypes.Message) {
+	oldName, ok := m.Actor.Attributes["oldName"]
+	name, ok2 := m.Actor.Attributes["oldName"]
+	if ok && ok2 {
+		logger.Debugf("Renamed container '%s' => '%s'", oldName, name)
+
+		err := (*d.list).RemoveService(oldName)
+		if err != nil {
+			logger.Errorf("Failed to remove renamed svc id=%s: %s", m.ID, err.Error())
+		}
+
+		svc, err := d.createService(m.ID)
+		if err != nil {
+			logger.Errorf("Failed to get renamed svc id=%s: %s", m.ID, err.Error())
+			return
+		}
+
+		err = (*d.list).AddService(m.ID, svc)
+		if err != nil {
+			logger.Errorf("Failed to add renamed svc id=%s: %s", m.ID, err.Error())
+		}
+	}
+}
+
+func (d *DockerManager) destroyHandler(m eventtypes.Message) {
+	logger.Debugf("Destroyed container '%s'", m.ID)
+
+	if d.config.All {
+		err := (*d.list).RemoveService(m.ID)
+		if err != nil {
+			logger.Errorf("Failed to remove svc id=%s: %s", m.ID, err.Error())
+		}
+	}
+}
+
+//
+// Meat
+//
+
 func (d *DockerManager) createService(id string) (*servers.Service, error) {
 	desc, err := d.client.ContainerInspect(context.Background(), id)
 	if err != nil {
@@ -172,6 +179,10 @@ func (d *DockerManager) createService(id string) (*servers.Service, error) {
 
 	svc, err := servers.NewService()
 	orPanic(err)
+
+	svc.Name = cleanContainerName(desc.Name)
+
+	svc.Primary = utils.DomainJoin(svc.Name, d.config.Domain.String(), "")
 	svc.Aliases = make([]string, 0)
 
 	svc.Image = getImageName(desc.Config.Image)
@@ -179,8 +190,6 @@ func (d *DockerManager) createService(id string) (*servers.Service, error) {
 		logger.Warningf("Warning: Can't route %s, image %s is not a tag.", id[:10], svc.Image)
 		svc.Image = ""
 	}
-	svc.Name = cleanContainerName(desc.Name)
-	svc.Primary = utils.DomainJoin(svc.Name, d.config.Domain.String(), "")
 
 	switch len(desc.NetworkSettings.Networks) {
 	case 0:
@@ -194,27 +203,33 @@ func (d *DockerManager) createService(id string) (*servers.Service, error) {
 		}
 	}
 
+	svc.Ports = desc.NetworkSettings.Ports
+
 	for src, _ := range desc.NetworkSettings.Ports {
 		switch src.Proto() {
 		case "tcp":
 			switch src.Port() {
 			case "80":
 				svc.HttpPort = src.Port()
-				break
 			case "8000", "8080":
-				svc.HttpPort = src.Port()
+				if svc.HttpPort == "" {
+					svc.HttpPort = src.Port()
+				}
+
+			case "443":
+				svc.HttpsPort = src.Port()
+			case "8443":
+				if svc.HttpsPort == "" {
+					svc.HttpsPort = src.Port()
+				}
 			}
 		}
 	}
 
-	svc.Ports = desc.NetworkSettings.Ports
-
 	env := splitEnv(desc.Config.Env)
-	svc.ApplyEnvOverrides(env, "SERVICE")
-	svc.ApplyEnvOverrides(env, d.config.Name)
-
-	//svc.ApplyLabelOverrides(desc.Config.Labels, d.config.LabelPrefix)
-	svc.ApplyLabelOverrides(desc.Config.Labels, d.config.Name)
+	svc.ApplyOverridesMapping(env, "SERVICE_")
+	svc.ApplyOverridesMapping(env, d.config.GetEnvPrefix())
+	svc.ApplyOverridesMapping(desc.Config.Labels, d.config.GetLabelPrefix())
 
 	if svc.Ignore {
 		return nil, errors.New("Ignoring " + id)
@@ -235,19 +250,15 @@ func (d *DockerManager) createService(id string) (*servers.Service, error) {
 }
 
 func filterComposeLabels(labels map[string]string) map[string]string {
-	return utils.FilterMappingByPrefix(labels, "com.docker.compose.", true)
+	return utils.FilterMappingByKeyPrefix(labels, "com.docker.compose.", true)
 }
 
 func genComposeAliases(composeLabels map[string]string) []string {
 	aliases := make([]string, 0)
 
 	required := []string{"project", "service", "container-number"}
-	for _, req := range required {
-		_, ok := composeLabels[req]
-		if !ok {
-			logger.Errorf("Missing required key %v", req)
-			return aliases
-		}
+	if !utils.HasKeys(composeLabels, required) {
+		return aliases
 	}
 
 	idx := composeLabels["container-number"]

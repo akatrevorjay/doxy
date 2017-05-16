@@ -168,7 +168,7 @@ func (svc *Service) ApplyOverride(k string, v string) error {
 }
 
 // ApplyOverridesMapping applies mapping of possible overrides (with the given prefix) to the given Service.
-func (svc *Service) ApplyOverridesMapping(mapping map[string]string, prefix string) error {
+func (svc *Service) ApplyOverridesMapping(mapping map[string]string, prefix string) {
 	var name string
 	for k, v := range mapping {
 		if !strings.HasPrefix(k, prefix) {
@@ -178,22 +178,6 @@ func (svc *Service) ApplyOverridesMapping(mapping map[string]string, prefix stri
 
 		svc.ApplyOverride(name, v)
 	}
-
-	return nil
-}
-
-// ApplyLabelOverrides applies mapping of container labels containing possible overrides (with the given 'prefix.')
-// to the given Service.
-func (svc *Service) ApplyLabelOverrides(labels map[string]string, prefix string) error {
-	prefix += "."
-	return svc.ApplyOverridesMapping(labels, prefix)
-}
-
-// ApplyEnvOverrides applies mapping of container env vars containing possible overrides (with the given 'PREFIX_')
-// to the given Service.
-func (svc *Service) ApplyEnvOverrides(env map[string]string, prefix string) error {
-	prefix = fmt.Sprintf("%s_", strings.ToUpper(prefix))
-	return svc.ApplyOverridesMapping(env, prefix)
 }
 
 // ListDomains lists domains

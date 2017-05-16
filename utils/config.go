@@ -11,6 +11,7 @@ package utils
 import (
 	"os"
 	"strings"
+	"fmt"
 )
 
 // Domain represents a domain
@@ -69,6 +70,14 @@ type Config struct {
 	Verbose     bool
 	Quiet       bool
 	All         bool
+}
+
+func (c *Config) GetEnvPrefix() string {
+	return fmt.Sprintf("%s_", strings.ToUpper(c.Name))
+}
+
+func (c *Config) GetLabelPrefix() string {
+	return fmt.Sprintf("%s.", strings.ToLower(c.Name))
 }
 
 // NewConfig creates a new config
