@@ -226,10 +226,11 @@ func (d *DockerManager) createService(id string) (*servers.Service, error) {
 		}
 	}
 
+	svc.ApplyOverridesMapping(desc.Config.Labels, d.config.GetLabelPrefix())
+
 	env := splitEnv(desc.Config.Env)
 	svc.ApplyOverridesMapping(env, "SERVICE_")
 	svc.ApplyOverridesMapping(env, d.config.GetEnvPrefix())
-	svc.ApplyOverridesMapping(desc.Config.Labels, d.config.GetLabelPrefix())
 
 	if svc.Ignore {
 		return nil, errors.New("Ignoring " + id)
@@ -247,33 +248,6 @@ func (d *DockerManager) createService(id string) (*servers.Service, error) {
 	logger.Infof("Created svc: %s", svc)
 
 	return svc, nil
-}
-
-func filterComposeLabels(labels map[string]string) map[string]string {
-	return utils.FilterMappingByKeyPrefix(labels, "com.docker.compose.", true)
-}
-
-func genComposeAliases(composeLabels map[string]string) []string {
-	aliases := make([]string, 0)
-
-	required := []string{"project", "service", "container-number"}
-	if !utils.HasKeys(composeLabels, required) {
-		return aliases
-	}
-
-	idx := composeLabels["container-number"]
-	service := composeLabels["service"]
-	project := composeLabels["project"]
-
-	aliases = append(
-		aliases,
-		// i.s.p
-		utils.DomainJoin(idx, service, project),
-		// s.p
-		utils.DomainJoin(service, project),
-	)
-
-	return aliases
 }
 
 func getImageName(tag string) string {
@@ -315,3 +289,35 @@ func splitEnv(in []string) (out map[string]string) {
 	}
 	return
 }
+
+//
+// Compose label handling
+//
+
+func filterComposeLabels(labels map[string]string) map[string]string {
+	return utils.FilterMappingByKeyPrefix(labels, "com.docker.compose.", true)
+}
+
+func genComposeAliases(composeLabels map[string]string) []string {
+	aliases := make([]string, 0)
+
+	required := []string{"project", "service", "container-number"}
+	if !utils.HasKeys(composeLabels, required) {
+		return aliases
+	}
+
+	idx := composeLabels["container-number"]
+	service := composeLabels["service"]
+	project := composeLabels["project"]
+
+	aliases = append(
+		aliases,
+		// i.s.p
+		utils.DomainJoin(idx, service, project),
+		// s.p
+		utils.DomainJoin(service, project),
+	)
+
+	return aliases
+}
+
