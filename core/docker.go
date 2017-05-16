@@ -115,9 +115,7 @@ func (d *DockerManager) Start() error {
 	eventHandler := events.NewHandler(events.ByAction)
 
 	eventHandler.Handle("start", startHandler)
-	//eventHandler.Handle("stop", stopHandler)
 	eventHandler.Handle("die", stopHandler)
-	//eventHandler.Handle("kill", stopHandler)
 	eventHandler.Handle("destroy", destroyHandler)
 	eventHandler.Handle("rename", renameHandler)
 
