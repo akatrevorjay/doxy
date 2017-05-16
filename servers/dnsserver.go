@@ -269,44 +269,52 @@ func (s *DNSServer) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 		return
 	}
 
-	m.Answer = make([]dns.RR, 0)
-
 	logger.Debugf("DNS query %v from remote %v", r.Question[0].Name, w.RemoteAddr())
 
-	for svc := range (*s.list).QueryServices(r.Question[0].Name) {
-		var rr dns.RR
-		switch r.Question[0].Qtype {
-
-		case dns.TypeA:
-			if r.Question[0].Name != svc.Primary {
-				rr = s.makeServiceCNAME(r.Question[0].Name, svc)
-				m.Answer = append(m.Answer, rr)
-			}
-			rr = s.makeServiceA(svc.Primary, svc)
-
-		case dns.TypeMX:
-			rr = s.makeServiceMX(r.Question[0].Name, svc)
-
-		default:
-			logger.Debugf("Query type not supported: %v", r.Question[0].Qtype)
-			// this query type isn't supported, but we do have
-			// a record with this name. Per RFC 4074 sec. 3, we
-			// immediately return an empty NOERROR reply.
-			m.Ns = s.createSOA()
-			m.MsgHdr.Authoritative = true
-			w.WriteMsg(m)
-			return
-
-		}
-
-		m.Answer = append(m.Answer, rr)
+	var svc *Service
+	for svc = range (*s.list).QueryServices(r.Question[0].Name) {
+		break
 	}
 
 	// We didn't find a record corresponding to the query
-	if len(m.Answer) == 0 {
-		logger.Debugf("No DNS record found for query %s", r.Question[0].Name)
+	if svc == nil {
+		logger.Debugf("DNS record *not* found for query %s from remote %v", r.Question[0].Name, w.RemoteAddr())
 		m.Ns = s.createSOA()
 		m.SetRcode(r, dns.RcodeNameError) // NXDOMAIN
+		w.WriteMsg(m)
+		return
+	}
+
+	m.Answer = make([]dns.RR, 0)
+	var rr dns.RR
+
+	switch r.Question[0].Qtype {
+	case dns.TypeA:
+		if r.Question[0].Name != svc.Primary {
+			rr = s.makeServiceCNAME(r.Question[0].Name, svc)
+			m.Answer = append(m.Answer, rr)
+		}
+
+		rr = s.makeServiceA(svc.Primary, svc)
+		m.Answer = append(m.Answer, rr)
+
+	case dns.TypeMX:
+		rr = s.makeServiceMX(r.Question[0].Name, svc)
+		m.Answer = append(m.Answer, rr)
+
+	default:
+		qtype_name := dns.TypeToString[r.Question[0].Qtype]
+
+		logger.Debugf("Query type not supported: %s (%v)", qtype_name, r.Question[0].Qtype)
+		utils.Dump(r.Question)
+
+		// this query type isn't supported, but we do have
+		// a record with this name. Per RFC 4074 sec. 3, we
+		// immediately return an empty NOERROR reply.
+		m.MsgHdr.Authoritative = true
+		w.WriteMsg(m)
+		return
+
 	}
 
 	for _, rr := range m.Answer {
