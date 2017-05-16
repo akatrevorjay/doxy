@@ -2,16 +2,12 @@ package servers
 
 import (
 	"errors"
-	//"fmt"
 	"net"
 	"regexp"
-	//"strconv"
 	"strings"
 	"sync"
 
 	"github.com/akatrevorjay/doxy/utils"
-	//"github.com/docker/go-connections/nat"
-	//"github.com/miekg/dns"
 )
 
 // ServiceMux stores service state and muxes events to ServiceHandler's
