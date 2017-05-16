@@ -6,6 +6,7 @@ import (
 	"net"
 	"regexp"
 	"strings"
+	"fmt"
 
 	"golang.org/x/net/context"
 
@@ -316,6 +317,10 @@ func genComposeAliases(composeLabels map[string]string) []string {
 		utils.DomainJoin(idx, service, project),
 		// s.p
 		utils.DomainJoin(service, project),
+		// s_p
+		fmt.Sprintf("%s_%s", service, project),
+		// p_s
+		fmt.Sprintf("%s_%s", project, service),
 	)
 
 	return aliases
