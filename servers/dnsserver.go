@@ -263,28 +263,26 @@ func (s *DNSServer) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 		return
 	}
 
-	m.Answer = make([]dns.RR, 0, 2)
-	query := r.Question[0].Name
+	m.Answer = make([]dns.RR, 0)
 
-	// trim off any trailing dot
-	if query[len(query)-1] == '.' {
-		query = query[:len(query)-1]
-	}
+	logger.Debugf("DNS query %v from remote %v", r.Question[0].Name, w.RemoteAddr())
 
-	logger.Debugf("DNS query '%s' from remote '%s'", query, w.RemoteAddr())
-
-	for service := range (*s.list).QueryServices(query) {
+	for svc := range (*s.list).QueryServices(r.Question[0].Name) {
 		var rr dns.RR
 		switch r.Question[0].Qtype {
+
 		case dns.TypeA:
-			if r.Question[0].Name != service.Primary {
-				rr = s.makeServiceCNAME(r.Question[0].Name, service)
+			if r.Question[0].Name != svc.Primary {
+				rr = s.makeServiceCNAME(r.Question[0].Name, svc)
 				m.Answer = append(m.Answer, rr)
 			}
-			rr = s.makeServiceA(service.Primary, service)
+			rr = s.makeServiceA(svc.Primary, svc)
+
 		case dns.TypeMX:
-			rr = s.makeServiceMX(r.Question[0].Name, service)
+			rr = s.makeServiceMX(r.Question[0].Name, svc)
+
 		default:
+			logger.Debugf("Query type not supported: %v", r.Question[0].Qtype)
 			// this query type isn't supported, but we do have
 			// a record with this name. Per RFC 4074 sec. 3, we
 			// immediately return an empty NOERROR reply.
@@ -292,19 +290,24 @@ func (s *DNSServer) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 			m.MsgHdr.Authoritative = true
 			w.WriteMsg(m)
 			return
-		}
 
-		logger.Debugf("DNS record found for query '%s'", query)
+		}
 
 		m.Answer = append(m.Answer, rr)
 	}
 
 	// We didn't find a record corresponding to the query
 	if len(m.Answer) == 0 {
-		logger.Debugf("No DNS record found for query '%s'", query)
+		logger.Debugf("No DNS record found for query '%s'", r.Question[0].Name)
 		m.Ns = s.createSOA()
 		m.SetRcode(r, dns.RcodeNameError) // NXDOMAIN
 	}
+
+	for _, rr := range m.Answer {
+		logger.Debugf("%s: %v", r.Question[0].Name, rr)
+	}
+
+	//utils.Dump(m)
 
 	w.WriteMsg(m)
 }
@@ -312,7 +315,7 @@ func (s *DNSServer) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 func (s *DNSServer) handleNxdomain(w dns.ResponseWriter, r *dns.Msg) {
 	m := new(dns.Msg)
 	m.SetReply(r)
-	//m.RecursionAvailable = true
+	m.RecursionAvailable = true
 
 	m.Ns = s.createSOA()
 	m.SetRcode(r, dns.RcodeNameError) // NXDOMAIN

@@ -87,6 +87,11 @@ func (s *ServiceMux) GetAllServices() (map[string]*Service, error) {
 func (s *ServiceMux) QueryServices(query string) chan *Service {
 	c := make(chan *Service, 3)
 
+	// trim off any trailing dot
+	if query[len(query)-1] == '.' {
+		query = query[:len(query)-1]
+	}
+
 	go func() {
 		suffix := s.config.Domain.String()
 
