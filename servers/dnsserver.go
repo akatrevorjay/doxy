@@ -65,13 +65,13 @@ func (s *DNSServer) clientLoadResolvconf() {
 	}
 
 	if len(cc.Servers) > 0 {
-		logger.Infof("Loaded %d upstream DNS servers from '%s': %s", len(cc.Servers), resolvconf_path, cc.Servers)
+		logger.Infof("Loaded %d upstream DNS servers from %s: %s", len(cc.Servers), resolvconf_path, cc.Servers)
 	}
 }
 
 // Start starts the DNSServer
 func (s *DNSServer) Start() error {
-	logger.Infof("Starting DNS service; domain='%s' listening on %s/tcp+udp", s.config.Domain.String(), s.config.DnsAddr)
+	logger.Infof("Starting DNS service; domain=%s listening on %s/tcp+udp", s.config.Domain.String(), s.config.DnsAddr)
 
 	go func() {
 		err := s.serverUdp.ListenAndServe()
@@ -99,21 +99,24 @@ func (s *DNSServer) Stop() {
 // AddService adds a new container and thus new DNS records
 func (s *DNSServer) AddService(id string, service *Service) error {
 	if len(service.IPs) == 0 {
-		logger.Warningf("Service '%s' ignored: No IP provided:", id, id)
+		logger.Warningf("Service %s ignored: No IP provided.", service.Name)
 		return nil
 	}
 
 	defer s.lock.Unlock()
 	s.lock.Lock()
 
+	added := make([]string, 0)
 	for domain := range service.ListDomains(s.config.Domain.String(), true) {
 		if dns.IsSubDomain(s.config.Domain.String(), domain) {
 			continue
 		}
 
-		logger.Debugf("DNS zone=%s for service=%s", domain, service.Name)
 		s.mux.HandleFunc(domain, s.handleRequest)
+
+		added = append(added, domain)
 	}
+	logger.Infof("Handling DNS zones for service=%s: %v", service.Name, added)
 
 	return nil
 }
@@ -127,28 +130,31 @@ func (s *DNSServer) RemoveService(id string) error {
 	}
 
 	if len(service.IPs) == 0 {
-		logger.Warningf("Service '%s' ignored: No IP provided:", id, id)
+		logger.Warningf("Service %s ignored: No IP provided:", id, id)
 		return nil
 	}
 
 	defer s.lock.Unlock()
 	s.lock.Lock()
 
+	removed := make([]string, 0)
 	for domain := range service.ListDomains(s.config.Domain.String(), true) {
 		if dns.IsSubDomain(s.config.Domain.String(), domain) {
 			continue
 		}
 
-		logger.Debugf("Removing DNS zone=%s for service=%s", domain, service.Name)
 		s.mux.HandleRemove(domain)
+
+		removed = append(removed, domain)
 	}
+	logger.Infof("Removed DNS zones for service=%s: %v", service.Name, removed)
 
 	return nil
 }
 
 func (s *DNSServer) handleForward(w dns.ResponseWriter, r *dns.Msg) {
 	for _, nameserver := range s.config.Nameservers {
-		logger.Debugf("Forwarding DNS query for domain='%s' to nameserver='%s'", r.Question[0].Name, nameserver)
+		logger.Debugf("Forwarding DNS query for domain=%s to nameserver=%s", r.Question[0].Name, nameserver)
 
 		in, _, err := s.client.Exchange(r, nameserver)
 		if err == nil {
@@ -190,11 +196,11 @@ func (s *DNSServer) makeServiceA(n string, service *Service) dns.RR {
 
 	if len(service.IPs) != 0 {
 		if len(service.IPs) > 1 {
-			logger.Warningf("Multiple IP address found for container '%s'. Only the first address will be used", service.Name)
+			logger.Warningf("Multiple IP address found for container %s. Only the first address will be used", service.Name)
 		}
 		rr.A = service.IPs[0]
 	} else {
-		logger.Errorf("No valid IP address found for container '%s' ", service.Name)
+		logger.Errorf("No valid IP address found for container %s ", service.Name)
 	}
 
 	return rr
@@ -298,7 +304,7 @@ func (s *DNSServer) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 
 	// We didn't find a record corresponding to the query
 	if len(m.Answer) == 0 {
-		logger.Debugf("No DNS record found for query '%s'", r.Question[0].Name)
+		logger.Debugf("No DNS record found for query %s", r.Question[0].Name)
 		m.Ns = s.createSOA()
 		m.SetRcode(r, dns.RcodeNameError) // NXDOMAIN
 	}
@@ -308,7 +314,6 @@ func (s *DNSServer) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 	}
 
 	//utils.Dump(m)
-
 	w.WriteMsg(m)
 }
 

@@ -260,14 +260,17 @@ func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider) (*ProxyHttpSe
 // AddService adds a new container and thus new DNS records
 func (s *ProxyHttpServer) AddService(id string, service *Service) error {
 	if len(service.IPs) == 0 {
-		logger.Warningf("Service '%s' ignored: No IP provided:", id, id)
+		logger.Warningf("Service %s ignored: No IP provided:", service.Name)
 		return nil
 	}
 
+	added := make([]string, 0)
 	for domain := range service.ListDomains(s.config.Domain.String(), false) {
-		logger.Debugf("http/s domain=%s for service=%s", domain, service.Name)
 		//s.AddProxyDomain(domain)
+
+		added = append(added, domain)
 	}
+	logger.Infof("Handling HTTP zones for service=%s: %v", service.Name, added)
 
 	return nil
 }
@@ -281,14 +284,17 @@ func (s *ProxyHttpServer) RemoveService(id string) error {
 	}
 
 	if len(service.IPs) == 0 {
-		logger.Warningf("Service '%s' ignored: No IP provided:", id, id)
+		logger.Warningf("Service %s ignored: No IP provided:", id, id)
 		return nil
 	}
 
+	removed := make([]string, 0)
 	for domain := range service.ListDomains(s.config.Domain.String(), false) {
-		logger.Debugf("Removing http/s domain=%s for service=%s", domain, service.Name)
 		//s.RemoveProxyDomain(domain)
+
+		removed = append(removed, domain)
 	}
+	logger.Infof("Removed HTTP zones for service=%s: %v", service.Name, removed)
 
 	return nil
 }

@@ -102,7 +102,7 @@ func (d *DockerManager) Stop() {
 //
 
 func (d *DockerManager) startHandler(m eventtypes.Message) {
-	logger.Debugf("Started container '%s'", m.ID)
+	logger.Debugf("Started container %s", m.ID)
 
 	svc, err := d.createService(m.ID)
 	if err != nil {
@@ -118,10 +118,10 @@ func (d *DockerManager) startHandler(m eventtypes.Message) {
 }
 
 func (d *DockerManager) stopHandler(m eventtypes.Message) {
-	logger.Debugf("Stopped container '%s'", m.ID)
+	logger.Debugf("Stopped container %s", m.ID)
 
 	if d.config.All {
-		logger.Debugf("Stopped container '%s' not removed as --all argument is true", m.ID)
+		logger.Debugf("Stopped container %s not removed as --all argument is true", m.ID)
 		return
 	}
 
@@ -136,7 +136,7 @@ func (d *DockerManager) renameHandler(m eventtypes.Message) {
 	oldName, ok := m.Actor.Attributes["oldName"]
 	name, ok2 := m.Actor.Attributes["oldName"]
 	if ok && ok2 {
-		logger.Debugf("Renamed container '%s' => '%s'", oldName, name)
+		logger.Debugf("Renamed container %s => %s", oldName, name)
 
 		err := (*d.list).RemoveService(oldName)
 		if err != nil {
@@ -157,7 +157,7 @@ func (d *DockerManager) renameHandler(m eventtypes.Message) {
 }
 
 func (d *DockerManager) destroyHandler(m eventtypes.Message) {
-	logger.Debugf("Destroyed container '%s'", m.ID)
+	logger.Debugf("Destroyed container %s", m.ID)
 
 	if d.config.All {
 		err := (*d.list).RemoveService(m.ID)
@@ -193,7 +193,7 @@ func (d *DockerManager) createService(id string) (*servers.Service, error) {
 
 	switch len(desc.NetworkSettings.Networks) {
 	case 0:
-		logger.Warningf("Warning, no IP address found for container '%s' ", desc.Name)
+		logger.Warningf("Warning, no IP address found for container %s ", desc.Name)
 	default:
 		for _, value := range desc.NetworkSettings.Networks {
 			ip := net.ParseIP(value.IPAddress)
@@ -226,6 +226,8 @@ func (d *DockerManager) createService(id string) (*servers.Service, error) {
 		}
 	}
 
+	composeLabels := filterComposeLabels(desc.Config.Labels)
+
 	svc.ApplyOverridesMapping(desc.Config.Labels, d.config.GetLabelPrefix())
 
 	env := splitEnv(desc.Config.Env)
@@ -237,8 +239,6 @@ func (d *DockerManager) createService(id string) (*servers.Service, error) {
 	}
 
 	if d.config.CreateAlias {
-		composeLabels := filterComposeLabels(desc.Config.Labels)
-
 		aliases := genComposeAliases(composeLabels)
 		if len(aliases) > 0 {
 			svc.Aliases = append(svc.Aliases, aliases...)
