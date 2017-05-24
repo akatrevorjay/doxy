@@ -3,182 +3,26 @@ package servers
 import (
 	"bufio"
 	"bytes"
-	"crypto/rand"
-	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
 	"fmt"
-	"io/ioutil"
-	"math/big"
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
-	"time"
 
 	"github.com/akatrevorjay/doxy/utils"
+	"github.com/akatrevorjay/doxy/utils/ca"
+
 	"github.com/elazarl/goproxy"
 	vhost "github.com/inconshreveable/go-vhost"
 )
 
-func genPrivateKey(rsaBits int) *rsa.PrivateKey {
-	priv, err := rsa.GenerateKey(rand.Reader, rsaBits)
-	orPanic(err)
-	return priv
-}
-
-func genCert(priv *rsa.PrivateKey, dnsNames []string, validFrom time.Time, validDuration time.Duration) *x509.Certificate {
-	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
-	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
-	orPanic(err)
-
-	template := x509.Certificate{
-		SerialNumber: serialNumber,
-		Subject: pkix.Name{
-			Organization: []string{"Doxy"},
-		},
-		NotBefore: validFrom,
-		NotAfter:  validFrom.Add(validDuration),
-
-		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		BasicConstraintsValid: true,
-	}
-
-	// CA
-	template.IsCA = true
-	template.KeyUsage |= x509.KeyUsageCertSign
-
-	for _, h := range dnsNames {
-		if ip := net.ParseIP(h); ip != nil {
-			template.IPAddresses = append(template.IPAddresses, ip)
-		} else {
-			template.DNSNames = append(template.DNSNames, h)
-		}
-	}
-
-	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
-	orPanic(err)
-
-	cert, err := x509.ParseCertificate(derBytes)
-	orPanic(err)
-
-	return cert
-}
-
-func pemBlockForPrivateKey(priv *rsa.PrivateKey) *pem.Block {
-	pemBlock := &pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(priv),
-	}
-
-	return pemBlock
-}
-
-func pemBlockForPublicKey(pub *rsa.PublicKey) *pem.Block {
-	pubASN1, err := x509.MarshalPKIXPublicKey(pub)
-	if err != nil {
-		orPanic(err)
-	}
-
-	pemBlock := &pem.Block{
-		Type:  "RSA PUBLIC KEY",
-		Bytes: pubASN1,
-	}
-
-	return pemBlock
-}
-
-func writePrivateKey(priv *rsa.PrivateKey, file string) {
-	out, err := os.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
-	orPanic(err)
-
-	pem.Encode(
-		out,
-		pemBlockForPrivateKey(priv),
-	)
-
-	out.Close()
-
-	logger.Infof("Wrote private key to file %v", file)
-}
-
-func writeCertFile(cert *x509.Certificate, file string) {
-	derBytes := cert.Raw
-
-	out, err := os.Create(file)
-	orPanic(err)
-
-	pem.Encode(
-		out,
-		&pem.Block{
-			Type:  "CERTIFICATE",
-			Bytes: derBytes,
-		},
-	)
-
-	out.Close()
-
-	logger.Infof("Wrote certificate to file %v", file)
-}
-
-func (s *ProxyHttpServer) readOrGenKeyPair() ([]byte, []byte) {
-	var err error
-
-	tryRead := func(keyfile string, certfile string) ([]byte, []byte, error) {
-		logger.Debugf("Reading keypair from keyfile=%v certfile=%v", keyfile, certfile)
-
-		var privBytes, certBytes []byte
-		var err1, err2 error
-
-		privBytes, err1 = ioutil.ReadFile(keyfile)
-		certBytes, err2 = ioutil.ReadFile(certfile)
-		if err1 != nil || err2 != nil {
-			err := fmt.Errorf("Failed to load keypair keyfile=%v certfile=%v", keyfile, certfile)
-			return nil, nil, err
-		}
-
-		logger.Infof("Read keypair from keyfile=%v certfile=%v", keyfile, certfile)
-		return privBytes, certBytes, nil
-	}
-
-	gen := func(keyfile string, certfile string, bits int) {
-		logger.Infof("Generating keypair keyfile=%v certfile=%v", keyfile, certfile)
-
-		// Generate key
-		priv := genPrivateKey(bits)
-
-		// Generate cert
-		var dnsNames []string
-		dnsNames = append(dnsNames, s.config.Name)
-
-		cert := genCert(priv, dnsNames, time.Now(), 365*24*time.Hour)
-
-		// Write to files
-		writePrivateKey(priv, keyfile)
-		writeCertFile(cert, certfile)
-	}
-
-	var privBytes, certBytes []byte
-
-	privBytes, certBytes, err = tryRead(s.config.TlsCaKey, s.config.TlsCert)
-	if err != nil {
-		logger.Errorf("Keypair not able to be read, generating one for you.")
-
-		gen(s.config.TlsCaKey, s.config.TlsCert, s.config.TlsGenRsaBits)
-
-		privBytes, certBytes, err = tryRead(s.config.TlsCaKey, s.config.TlsCert)
-		orPanic(err)
-	}
-
-	return privBytes, certBytes
-}
-
 func (s *ProxyHttpServer) tlsSetup() {
-	privBytes, certBytes := s.readOrGenKeyPair()
+	var dnsNames []string
+	dnsNames = append(dnsNames, s.config.Name)
+
+	privBytes, certBytes := ca.ReadOrGenKeyPair(s.config.TlsCaKey, s.config.TlsCert, s.config.TlsGenRsaBits, dnsNames)
 
 	ca, err := tls.X509KeyPair(certBytes, privBytes)
 	orPanic(err)

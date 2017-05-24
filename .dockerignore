@@ -1,2 +1,1 @@
-# Skip ca from being inside of final image.
-/ca/ca.*
+.gitignore
