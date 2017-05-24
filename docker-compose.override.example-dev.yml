@@ -3,7 +3,4 @@ version: '3'
 services:
   doxy:
     command: doxydev -D 127.0.0.69:53 -H 127.0.0.69:80 -I 127.0.0.69:443
-    volumes:
-      - .:/go/src/github.com/akatrevorjay/doxy
-      - /var/run/docker.sock:/run/docker.sock
     #userns_mode: host
