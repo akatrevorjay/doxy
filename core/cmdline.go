@@ -52,9 +52,14 @@ func (cmdline *CommandLine) ParseParameters(rawParams []string) (res *utils.Conf
 
 	docker := cmdline.app.Flag("docker", "Path to the docker socket").Default(res.DockerHost).String()
 	dockertlsverify := cmdline.app.Flag("dockertlsverify", "Enable mTLS when connecting to docker").Default(strconv.FormatBool(res.DockerTlsVerify)).Bool()
-	dockertlscacert := cmdline.app.Flag("dockertlscacert", "Path to CA certificate").Default(res.DockerTlsCaCert).String()
-	dockertlscert := cmdline.app.Flag("dockertlscert", "Path to Client certificate").Default(res.DockerTlsCert).String()
-	dockertlskey := cmdline.app.Flag("dockertlskey", "Path to client certificate private key").Default(res.DockerTlsKey).String()
+	dockertlscacert := cmdline.app.Flag("dockertlscacert", "Path to Docker CA certificate").Default(res.DockerTlsCaCert).String()
+	dockertlscert := cmdline.app.Flag("dockertlscert", "Path to Docker client certificate").Default(res.DockerTlsCert).String()
+	dockertlskey := cmdline.app.Flag("dockertlskey", "Path to Docker client private key").Default(res.DockerTlsKey).String()
+
+	tlscakey := cmdline.app.Flag("tlscakey", "Path to TLS CA private key").Default(res.TlsCaKey).String()
+	tlscert := cmdline.app.Flag("tlscert", "Path to TLS certificate").Default(res.TlsCert).String()
+
+	kingpin.MustParse(cmdline.app.Parse(rawParams))
 
 	kingpin.MustParse(cmdline.app.Parse(rawParams))
 
@@ -71,6 +76,8 @@ func (cmdline *CommandLine) ParseParameters(rawParams []string) (res *utils.Conf
 	res.DockerTlsCaCert = *dockertlscacert
 	res.DockerTlsCert = *dockertlscert
 	res.DockerTlsKey = *dockertlskey
+	res.TlsCaKey = *tlscakey
+	res.TlsCert = *tlscert
 	res.Ttl = *ttl
 	res.CreateAlias = *createAlias
 	res.All = *all

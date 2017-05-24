@@ -18,7 +18,6 @@ import (
 	"os"
 	"regexp"
 	"time"
-	"path"
 
 	"github.com/akatrevorjay/doxy/utils"
 	"github.com/elazarl/goproxy"
@@ -165,13 +164,13 @@ func (s *ProxyHttpServer) readOrGenKeyPair() ([]byte, []byte) {
 
 	var privBytes, certBytes []byte
 
-	privBytes, certBytes, err = tryRead(s.tlsKeyFile, s.tlsCertFile)
+	privBytes, certBytes, err = tryRead(s.config.TlsCaKey, s.config.TlsCert)
 	if err != nil {
 		logger.Errorf("Keypair not able to be read, generating one for you.")
 
-		gen(s.tlsKeyFile, s.tlsCertFile, s.tlsKeyGenRsaBits)
+		gen(s.config.TlsCaKey, s.config.TlsCert, s.config.TlsGenRsaBits)
 
-		privBytes, certBytes, err = tryRead(s.tlsKeyFile, s.tlsCertFile)
+		privBytes, certBytes, err = tryRead(s.config.TlsCaKey, s.config.TlsCert)
 		orPanic(err)
 	}
 
@@ -215,23 +214,12 @@ type ProxyHttpServer struct {
 	config *utils.Config
 	list   *ServiceListProvider
 	server *goproxy.ProxyHttpServer
-
-	tlsKeyFile  string
-	tlsCertFile string
-
-	tlsKeyGenRsaBits int
 }
 
 func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider) (*ProxyHttpServer, error) {
 	s := &ProxyHttpServer{
 		config: c,
 		list:   &list,
-
-		// TODO Move to utils.Config
-		tlsKeyFile:  os.ExpandEnv(path.Join("$CA_PATH", "ca.key")),
-		tlsCertFile: os.ExpandEnv(path.Join("$CA_PATH", "ca.crt")),
-
-		tlsKeyGenRsaBits: 4096,
 	}
 
 	s.tlsSetup()

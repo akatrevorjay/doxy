@@ -11,6 +11,7 @@ package utils
 import (
 	"fmt"
 	"os"
+	"path"
 	"strings"
 )
 
@@ -53,23 +54,26 @@ func (n *nameservers) Set(value string) error {
 
 // Config contains DNSDock configuration
 type Config struct {
-	Name        string
-	Nameservers nameservers
-	DnsAddr     string
-	Domain      Domain
-	DockerHost  string
-	DockerTlsVerify   bool
-	DockerTlsCaCert   string
-	DockerTlsCert     string
-	DockerTlsKey      string
-	HttpAddr    string
-	HttpsAddr   string
-	Ttl         int
-	ForceTtl    bool
-	CreateAlias bool
-	Verbose     bool
-	Quiet       bool
-	All         bool
+	Name            string
+	Nameservers     nameservers
+	DnsAddr         string
+	Domain          Domain
+	DockerHost      string
+	DockerTlsVerify bool
+	DockerTlsCaCert string
+	DockerTlsCert   string
+	DockerTlsKey    string
+	HttpAddr        string
+	HttpsAddr       string
+	TlsGenRsaBits   int
+	TlsCaKey        string
+	TlsCert         string
+	Ttl             int
+	ForceTtl        bool
+	CreateAlias     bool
+	Verbose         bool
+	Quiet           bool
+	All             bool
 }
 
 func (c *Config) GetEnvPrefix() string {
@@ -86,30 +90,40 @@ func NewConfig() *Config {
 	if len(dockerHost) == 0 {
 		dockerHost = "unix:///var/run/docker.sock"
 	}
-	tlsVerify := len(os.Getenv("DOCKER_TLS_VERIFY")) != 0
+
+	dockerTlsVerify := len(os.Getenv("DOCKER_TLS_VERIFY")) != 0
+
 	dockerCerts := os.Getenv("DOCKER_CERT_PATH")
 	if len(dockerCerts) == 0 {
 		dockerCerts = os.Getenv("HOME") + "/.docker"
 	}
 
+	caPath := os.Getenv("CA_PATH")
+	if len(caPath) == 0 {
+		caPath = "."
+	}
+
 	return &Config{
-		Name:        "doxy",
-		Nameservers: nameservers{},
-		DnsAddr:     ":8053",
-		Domain:      NewDomain("docker"),
-		DockerHost:  dockerHost,
-		HttpAddr:    ":8080",
-		HttpsAddr:   ":8443",
-		CreateAlias: true,
-		DockerTlsVerify:   tlsVerify,
-		DockerTlsCaCert:   dockerCerts + "/ca.pem",
-		DockerTlsCert:     dockerCerts + "/cert.pem",
-		DockerTlsKey:      dockerCerts + "/key.pem",
-		Verbose:     true,
-		Quiet:       false,
-		All:         false,
-		ForceTtl:    false,
-		Ttl:         0,
+		Name:            "doxy",
+		Nameservers:     nameservers{},
+		DnsAddr:         ":8053",
+		Domain:          NewDomain("docker"),
+		DockerHost:      dockerHost,
+		HttpAddr:        ":8080",
+		HttpsAddr:       ":8443",
+		CreateAlias:     true,
+		DockerTlsVerify: dockerTlsVerify,
+		DockerTlsCaCert: dockerCerts + "/ca.pem",
+		DockerTlsCert:   dockerCerts + "/cert.pem",
+		DockerTlsKey:    dockerCerts + "/key.pem",
+		TlsCaKey:        path.Join(caPath, "ca.key"),
+		TlsCert:         path.Join(caPath, "cert.pem"),
+		TlsGenRsaBits:   4096,
+		Verbose:         true,
+		Quiet:           false,
+		All:             false,
+		ForceTtl:        false,
+		Ttl:             0,
 	}
 
 }
