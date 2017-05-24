@@ -271,7 +271,8 @@ func imageNameIsSHA(image, sha string) bool {
 	if !matched {
 		return false
 	}
-	return strings.HasPrefix(sha, image)
+
+	return strings.HasSuffix(image, sha)
 }
 
 func cleanContainerName(name string) string {

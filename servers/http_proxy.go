@@ -112,6 +112,9 @@ func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider) (*ProxyHttpSe
 			}
 
 			host = svc.IPs[0].String()
+
+			// TODO HttpsPort
+			port = svc.HttpPort
 		}
 
 		remoteHostport := net.JoinHostPort(host, port)
