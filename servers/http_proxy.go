@@ -10,12 +10,13 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"time"
 
 	"github.com/akatrevorjay/doxy/utils"
 	"github.com/akatrevorjay/doxy/utils/ca"
 
 	"github.com/elazarl/goproxy"
-	vhost "github.com/inconshreveable/go-vhost"
+	"github.com/inconshreveable/go-vhost"
 )
 
 func (s *ProxyHttpServer) tlsSetup() {
@@ -58,6 +59,7 @@ type ProxyHttpServer struct {
 	config *utils.Config
 	list   *ServiceListProvider
 	server *goproxy.ProxyHttpServer
+	mux *vhost.HTTPMuxer
 }
 
 func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider) (*ProxyHttpServer, error) {
@@ -80,28 +82,36 @@ func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider) (*ProxyHttpSe
 			return
 		}
 
-		host, port, err := net.SplitHostPort(req.URL.Host)
+		var rhost, host, port string
+
+		rhost = req.URL.Host
+		if rhost == "" {
+			rhost = req.Host
+		}
+
+		host, port, err := net.SplitHostPort(rhost)
 		if err != nil {
-			host, port = req.URL.Host, "80"
+			host, port = rhost, "80"
 		}
 
 		var svc *Service
-		for svc = range (*s.list).QueryServices(host) {
-			break
-		}
 
-		if svc == nil {
-			logger.Errorf("Service not available by name: %v", host)
-			//req.Write([]byte("HTTP/1.1 500 Cannot reach destination\r\n\r\n"))
-			//req.Close = true
-			proxy.ServeHTTP(w, nil)
-			return
-		}
+		if ip := net.ParseIP(host); ip == nil {
+			for svc = range (*s.list).QueryServices(host) {
+				break
+			}
 
-		host = svc.IPs[0].String()
-		// trim off any trailing dot
-		if host[len(host)-1] == '.' {
-			host = host[:len(host)-1]
+			if svc == nil {
+				logger.Errorf("Service not available by name: %v", host)
+				//w.Write([]byte("HTTP/1.1 500 Cannot reach destination\r\n\r\n"))
+				//req.Write([]byte("HTTP/1.1 500 Cannot reach destination\r\n\r\n"))
+				//req.Close = true
+				//proxy.ServeHTTP(w, req)
+				//proxy.ServeHTTP(w, nil)
+				return
+			}
+
+			host = svc.IPs[0].String()
 		}
 
 		remoteHostport := net.JoinHostPort(host, port)
@@ -160,10 +170,6 @@ func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider) (*ProxyHttpSe
 			}
 
 			host = svc.IPs[0].String()
-			// trim off any trailing dot
-			if host[len(host)-1] == '.' {
-				host = host[:len(host)-1]
-			}
 
 			remoteHostport := net.JoinHostPort(host, port)
 
@@ -221,10 +227,6 @@ func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider) (*ProxyHttpSe
 			}
 
 			host = svc.IPs[0].String()
-			// trim off any trailing dot
-			if host[len(host)-1] == '.' {
-				host = host[:len(host)-1]
-			}
 
 			remoteHostport := net.JoinHostPort(host, port)
 
@@ -264,6 +266,15 @@ func (s *ProxyHttpServer) AddService(id string, service *Service) error {
 	added := make([]string, 0)
 	for domain := range service.ListDomains(s.config.Domain.String(), false) {
 		//s.AddProxyDomain(domain)
+
+		//ml, _ := s.mux.Listen(domain)
+
+		//go func(vh virtualHost, ml net.Listener) {
+		//    for {
+		//        conn, _ := ml.Accept()
+		//        go vh.Handle(conn)
+		//    }
+		//}(vhost, ml)
 
 		added = append(added, domain)
 	}
@@ -307,6 +318,11 @@ func (s *ProxyHttpServer) Start() error {
 			logger.Fatalf("Error listening for https connections - %v", err)
 		}
 
+		muxTimeout := 1*time.Hour
+
+		mux, _ := vhost.NewHTTPMuxer(ln, muxTimeout)
+		s.mux = mux
+
 		for {
 			c, err := ln.Accept()
 			if err != nil {
@@ -330,26 +346,23 @@ func (s *ProxyHttpServer) Start() error {
 					host, port = tlsConn.Host(), "80"
 				}
 
-				ok := false
-				for svc := range (*s.list).QueryServices(host) {
-					host = svc.IPs[0].String()
-
-					ok = true
+				var svc *Service
+				for svc = range (*s.list).QueryServices(host) {
 					break
 				}
 
-				if !ok {
+				if svc == nil {
 					logger.Errorf("Service not available by name: %v", host)
-					//req.Write([]byte("HTTP/1.1 500 Cannot reach destination\r\n\r\n"))
-					//req.Close = true
-					//proxy.ServeHTTP(w, nil)
+					c.Close()
 					return
 				}
 
-				// trim off any trailing dot
-				if host[len(host)-1] == '.' {
-					host = host[:len(host)-1]
-				}
+				host = svc.IPs[0].String()
+				//host = svc.Primary
+				//// trim off any trailing dot
+				//if host[len(host)-1] == '.' {
+				//    host = host[:len(host)-1]
+				//}
 
 				remoteHostport := net.JoinHostPort(host, port)
 
@@ -358,8 +371,18 @@ func (s *ProxyHttpServer) Start() error {
 
 				logger.Debugf("Service available by name: %v", host)
 
+				var method string
+				//switch port {
+				//    case "443", svc.HttpsPort:
+				//        method = "CONNECT"
+				//    case svc.HttpPort:
+				//        // TODO This won't hold up with POSTs...
+				//        method = "GET"
+				//}
+				method = "CONNECT"
+
 				connectReq := &http.Request{
-					Method: "CONNECT",
+					Method: method,
 					URL: &url.URL{
 						Opaque: host,
 						Host:   remoteHostport,
