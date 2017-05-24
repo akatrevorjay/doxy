@@ -22,7 +22,6 @@ COPY certs certs
 
 COPY image image
 
-
 ENV APP_ROOT=/app
 RUN ln -sfvr . "$APP_ROOT"
 ENV PATH="$APP_ROOT/image/bin:$PATH"
