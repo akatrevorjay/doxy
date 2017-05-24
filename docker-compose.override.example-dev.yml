@@ -6,5 +6,4 @@ services:
     volumes:
       - .:/go/src/github.com/akatrevorjay/doxy
       - /var/run/docker.sock:/run/docker.sock
-    restart: always
     #userns_mode: host

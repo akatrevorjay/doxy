@@ -6,45 +6,17 @@ services:
     hostname: doxy
     container_name: doxy
     command: doxy -D :53 -H :80 -I :443
-    #restart: always
+    restart: always
 
     volumes:
       - .:/go/src/github.com/akatrevorjay/doxy
       - /var/run/docker.sock:/run/docker.sock
+      - ./ca:/ca
 
     network_mode: host
-    #networks:
-    #  - doxy
-    #  #- host
-
-    #healthcheck:
-    #  test: ["CMD", "curl", "-f", "http://localhost"]
-    #  interval: 1m30s
-    #  timeout: 10s
-    #  retries: 3
 
     expose:
       - 53/udp
       - 53/tcp
       - 80/tcp
       - 443/tcp
-
-    #ports:
-      #- 53:8053/udp
-      #- 53:8053/tcp
-      #- 80:8080
-      #- 443:8443
-      #- 172.17.0.0:53:53/udp
-      #- 172.17.0.0:53:53/tcp
-      #- 10.69.69.2:53:53/udp
-      #- 10.69.69.2:53:53/tcp
-      #- 10.69.69.2:80:80/tcp
-      #- 10.69.69.2:443:443/tcp
-
-#networks:
-#  doxy:
-#    ipam:
-#      config:
-#        - subnet: 10.69.69.0/30
-#  #host:
-#  #  external: true
