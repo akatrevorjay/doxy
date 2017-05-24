@@ -1,2 +1,2 @@
-# Skip certs from being inside of final image.
-/certs/ca.*
+# Skip ca from being inside of final image.
+/ca/ca.*

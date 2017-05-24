@@ -1,6 +1,6 @@
 /vendor/
 
-/certs/ca.*
+/ca/ca.*
 
 /docker-compose.override.yml
 /_*
