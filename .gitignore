@@ -1,3 +1,6 @@
-/dnsdock
 /vendor/
+
 /certs/ca.*
+
+/docker-compose.override.yml
+/_*
