@@ -51,10 +51,10 @@ func (cmdline *CommandLine) ParseParameters(rawParams []string) (res *utils.Conf
 	forceTtl := cmdline.app.Flag("forcettl", "Force TTL value even for forwared requests.").Bool()
 
 	docker := cmdline.app.Flag("docker", "Path to the docker socket").Default(res.DockerHost).String()
-	tlsverify := cmdline.app.Flag("tlsverify", "Enable mTLS when connecting to docker").Default(strconv.FormatBool(res.TlsVerify)).Bool()
-	tlscacert := cmdline.app.Flag("tlscacert", "Path to CA certificate").Default(res.TlsCaCert).String()
-	tlscert := cmdline.app.Flag("tlscert", "Path to Client certificate").Default(res.TlsCert).String()
-	tlskey := cmdline.app.Flag("tlskey", "Path to client certificate private key").Default(res.TlsKey).String()
+	dockertlsverify := cmdline.app.Flag("dockertlsverify", "Enable mTLS when connecting to docker").Default(strconv.FormatBool(res.DockerTlsVerify)).Bool()
+	dockertlscacert := cmdline.app.Flag("dockertlscacert", "Path to CA certificate").Default(res.DockerTlsCaCert).String()
+	dockertlscert := cmdline.app.Flag("dockertlscert", "Path to Client certificate").Default(res.DockerTlsCert).String()
+	dockertlskey := cmdline.app.Flag("dockertlskey", "Path to client certificate private key").Default(res.DockerTlsKey).String()
 
 	kingpin.MustParse(cmdline.app.Parse(rawParams))
 
@@ -67,10 +67,10 @@ func (cmdline *CommandLine) ParseParameters(rawParams []string) (res *utils.Conf
 	res.HttpsAddr = *https
 	res.Domain = utils.NewDomain(fmt.Sprintf("%s.%s", *environment, *domain))
 	res.DockerHost = *docker
-	res.TlsVerify = *tlsverify
-	res.TlsCaCert = *tlscacert
-	res.TlsCert = *tlscert
-	res.TlsKey = *tlskey
+	res.DockerTlsVerify = *dockertlsverify
+	res.DockerTlsCaCert = *dockertlscacert
+	res.DockerTlsCert = *dockertlscert
+	res.DockerTlsKey = *dockertlskey
 	res.Ttl = *ttl
 	res.CreateAlias = *createAlias
 	res.All = *all

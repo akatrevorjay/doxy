@@ -58,10 +58,10 @@ type Config struct {
 	DnsAddr     string
 	Domain      Domain
 	DockerHost  string
-	TlsVerify   bool
-	TlsCaCert   string
-	TlsCert     string
-	TlsKey      string
+	DockerTlsVerify   bool
+	DockerTlsCaCert   string
+	DockerTlsCert     string
+	DockerTlsKey      string
 	HttpAddr    string
 	HttpsAddr   string
 	Ttl         int
@@ -101,10 +101,10 @@ func NewConfig() *Config {
 		HttpAddr:    ":8080",
 		HttpsAddr:   ":8443",
 		CreateAlias: true,
-		TlsVerify:   tlsVerify,
-		TlsCaCert:   dockerCerts + "/ca.pem",
-		TlsCert:     dockerCerts + "/cert.pem",
-		TlsKey:      dockerCerts + "/key.pem",
+		DockerTlsVerify:   tlsVerify,
+		DockerTlsCaCert:   dockerCerts + "/ca.pem",
+		DockerTlsCert:     dockerCerts + "/cert.pem",
+		DockerTlsKey:      dockerCerts + "/key.pem",
 		Verbose:     true,
 		Quiet:       false,
 		All:         false,

@@ -18,6 +18,7 @@ import (
 	"os"
 	"regexp"
 	"time"
+	"path"
 
 	"github.com/akatrevorjay/doxy/utils"
 	"github.com/elazarl/goproxy"
@@ -226,8 +227,9 @@ func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider) (*ProxyHttpSe
 		config: c,
 		list:   &list,
 
-		tlsKeyFile:  "/app/certs/ca.key",
-		tlsCertFile: "/app/certs/ca.crt",
+		// TODO Move to utils.Config
+		tlsKeyFile:  os.ExpandEnv(path.Join("$CA_PATH", "ca.key")),
+		tlsCertFile: os.ExpandEnv(path.Join("$CA_PATH", "ca.crt")),
 
 		tlsKeyGenRsaBits: 4096,
 	}

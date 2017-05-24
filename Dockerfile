@@ -1,15 +1,26 @@
 FROM golang:1.8
 
+RUN apt-get update -qq \
+ && apt-get install -qqy git \
+ && apt-get clean
+
 RUN go get -u -v github.com/golang/lint/golint \
  && go get -u -v github.com/Masterminds/glide \
  && go get -u -v github.com/akatrevorjay/rerun
 
-ENV GOPACKAGE=github.com/akatrevorjay/doxy
+ENV GOPACKAGE=github.com/akatrevorjay/doxy \
+    APP_ROOT=/app
 
 WORKDIR /go/src/$GOPACKAGE
 
+ENV PATH="$APP_ROOT/image/bin:$PATH" \
+    CA_PATH=/ca
+
 COPY glide.* ./
 RUN glide i
+
+RUN ln -sfvr . "$APP_ROOT" \
+ && mkdir -pv "$CA_PATH"
 
 COPY utils utils
 COPY servers servers
@@ -18,13 +29,7 @@ COPY *.go ./
 
 RUN go install .
 
-COPY certs certs
-
 COPY image image
-
-ENV APP_ROOT=/app
-RUN ln -sfvr . "$APP_ROOT"
-ENV PATH="$APP_ROOT/image/bin:$PATH"
 
 ENTRYPOINT ["entrypoint"]
 CMD ["doxy"]

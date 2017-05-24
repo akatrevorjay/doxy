@@ -53,8 +53,8 @@ func main() {
 	logger.Infof("Init")
 
 	var tlsConfig *tls.Config
-	if config.TlsVerify {
-		clientCert, err := tls.LoadX509KeyPair(config.TlsCert, config.TlsKey)
+	if config.DockerTlsVerify {
+		clientCert, err := tls.LoadX509KeyPair(config.DockerTlsCert, config.DockerTlsKey)
 		orPanic(err)
 
 		tlsConfig = &tls.Config{
@@ -62,7 +62,7 @@ func main() {
 			Certificates: []tls.Certificate{clientCert},
 		}
 
-		pemData, err := ioutil.ReadFile(config.TlsCaCert)
+		pemData, err := ioutil.ReadFile(config.DockerTlsCaCert)
 		orPanic(err)
 
 		rootCert := x509.NewCertPool()
