@@ -35,4 +35,4 @@ ENTRYPOINT ["entrypoint"]
 CMD ["doxy"]
 
 # CI docker is currently too old for this. Enable later,
-HEALTHCHECK --interval=5m --timeout=3s CMD curl -f http://localhost/doxy-healthcheck || exit 1
+#HEALTHCHECK --interval=5m --timeout=3s CMD curl -f http://localhost/doxy-healthcheck || exit 1
