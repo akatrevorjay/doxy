@@ -6,7 +6,7 @@
  * of the MIT license.  See the LICENSE file for details.
  */
 
-package servers
+package dns
 
 import (
 	"net"
@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/akatrevorjay/doxy/servers"
 	"github.com/akatrevorjay/doxy/utils"
 	"github.com/miekg/dns"
 )
@@ -26,11 +27,11 @@ type DNSServer struct {
 	mux       *dns.ServeMux
 	lock      *sync.RWMutex
 	client    *dns.Client
-	list      *ServiceListProvider
+	list      *servers.ServiceListProvider
 }
 
 // NewDNSServer create a new DNSServer
-func NewDNSServer(c *utils.Config, list ServiceListProvider) (*DNSServer, error) {
+func NewDNSServer(c *utils.Config, list servers.ServiceListProvider) (*DNSServer, error) {
 	s := &DNSServer{
 		config: c,
 		lock:   &sync.RWMutex{},
@@ -97,7 +98,7 @@ func (s *DNSServer) Stop() {
 }
 
 // AddService adds a new container and thus new DNS records
-func (s *DNSServer) AddService(id string, service *Service) error {
+func (s *DNSServer) AddService(id string, service *servers.Service) error {
 	if len(service.IPs) == 0 {
 		logger.Warningf("Service %s ignored: No IP provided.", service.Name)
 		return nil
@@ -177,7 +178,7 @@ func (s *DNSServer) handleFailed(w dns.ResponseWriter, r *dns.Msg) {
 	dns.HandleFailed(w, r)
 }
 
-func (s *DNSServer) makeServiceA(n string, service *Service) dns.RR {
+func (s *DNSServer) makeServiceA(n string, service *servers.Service) dns.RR {
 	var ttl int
 	if service.TTL != -1 {
 		ttl = service.TTL
@@ -206,7 +207,7 @@ func (s *DNSServer) makeServiceA(n string, service *Service) dns.RR {
 	return rr
 }
 
-func (s *DNSServer) makeServiceMX(n string, service *Service) dns.RR {
+func (s *DNSServer) makeServiceMX(n string, service *servers.Service) dns.RR {
 	rr := new(dns.MX)
 
 	var ttl int
@@ -228,7 +229,7 @@ func (s *DNSServer) makeServiceMX(n string, service *Service) dns.RR {
 	return rr
 }
 
-func (s *DNSServer) makeServiceCNAME(n string, service *Service) dns.RR {
+func (s *DNSServer) makeServiceCNAME(n string, service *servers.Service) dns.RR {
 	rr := new(dns.CNAME)
 
 	var ttl int
@@ -271,7 +272,7 @@ func (s *DNSServer) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 
 	logger.Debugf("DNS query %v from remote %v", r.Question[0].Name, w.RemoteAddr())
 
-	var svc *Service
+	var svc *servers.Service
 	for svc = range (*s.list).QueryServices(r.Question[0].Name) {
 		break
 	}
@@ -394,7 +395,7 @@ func (s *DNSServer) handleReverseRequest(w dns.ResponseWriter, r *dns.Msg) {
 	s.handleForward(w, r)
 }
 
-func (s *DNSServer) QueryIP(query string) chan *Service {
+func (s *DNSServer) QueryIP(query string) chan *servers.Service {
 	reversedIP := strings.TrimSuffix(query, ".in-addr.arpa")
 	ipstr := strings.Join(utils.Reverse(dns.SplitDomainName(reversedIP)), ".")
 
@@ -425,22 +426,4 @@ func (s *DNSServer) createSOA() []dns.RR {
 		Minttl:  uint32(s.config.Ttl),
 	}
 	return []dns.RR{soa}
-}
-
-// isPrefixQuery is used to determine whether "query" is a potential prefix
-// query for "name". It allows for wildcards (*) in the query. However is makes
-// one exception to accomodate the desired behavior we wish from doxy,
-// namely, the query may be longer than "name" and still be a valid prefix
-// query for "name".
-// Examples:
-//   foo.bar.baz.qux is a valid query for bar.baz.qux (longer prefix is okay)
-//   foo.*.baz.qux   is a valid query for bar.baz.qux (wildcards okay)
-//   *.baz.qux       is a valid query for baz.baz.qux (wildcard prefix okay)
-func isPrefixQuery(query, name []string) bool {
-	for i, j := len(query)-1, len(name)-1; i >= 0 && j >= 0; i, j = i-1, j-1 {
-		if query[i] != name[j] && query[i] != "*" {
-			return false
-		}
-	}
-	return true
 }

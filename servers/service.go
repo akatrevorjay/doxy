@@ -222,7 +222,7 @@ func (svc *Service) HasPrefixMatch(query string, suffix string) (string, error) 
 
 	for domain := range svc.ListDomains(suffix, false) {
 		sdomain := dns.SplitDomainName(domain)
-		if isPrefixQuery(squery, sdomain) {
+		if utils.IsPrefixQuery(squery, sdomain) {
 			return domain, nil
 		}
 	}

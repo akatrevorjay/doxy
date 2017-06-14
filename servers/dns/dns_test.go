@@ -6,7 +6,7 @@
  * of the MIT license.  See the LICENSE file for details.
  */
 
-package servers
+package dns
 
 import (
 	"github.com/akatrevorjay/doxy/utils"

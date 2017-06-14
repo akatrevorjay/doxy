@@ -1,4 +1,4 @@
-package servers
+package http
 
 import (
 	"bufio"
@@ -12,12 +12,21 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/akatrevorjay/doxy/servers"
 	"github.com/akatrevorjay/doxy/utils"
 	"github.com/akatrevorjay/doxy/utils/ca"
 
 	"github.com/elazarl/goproxy"
 	"github.com/inconshreveable/go-vhost"
 )
+
+// ProxyHTTPServer represents the proxy endpoint
+type ProxyHttpServer struct {
+	config *utils.Config
+	list   *servers.ServiceListProvider
+	server *goproxy.ProxyHttpServer
+	mux *vhost.HTTPMuxer
+}
 
 func (s *ProxyHttpServer) tlsSetup() {
 	var dnsNames []string
@@ -35,6 +44,8 @@ func (s *ProxyHttpServer) tlsSetup() {
 
 	goproxy.OkConnect = &goproxy.ConnectAction{
 		Action:    goproxy.ConnectAccept,
+		//Action:    goproxy.ConnectHTTPMitm,
+		//Action:    goproxy.ConnectMitm,
 		TLSConfig: goproxy.TLSConfigFromCA(&ca),
 	}
 
@@ -54,15 +65,7 @@ func (s *ProxyHttpServer) tlsSetup() {
 	}
 }
 
-// ProxyHTTPServer represents the proxy endpoint
-type ProxyHttpServer struct {
-	config *utils.Config
-	list   *ServiceListProvider
-	server *goproxy.ProxyHttpServer
-	mux *vhost.HTTPMuxer
-}
-
-func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider) (*ProxyHttpServer, error) {
+func NewHTTPProxyServer(c *utils.Config, list servers.ServiceListProvider) (*ProxyHttpServer, error) {
 	s := &ProxyHttpServer{
 		config: c,
 		list:   &list,
@@ -78,6 +81,9 @@ func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider) (*ProxyHttpSe
 		logger.Debugf("NonproxyHandler w=%v req=%v", w, req)
 
 		if req.Host == "" {
+			// TODO mux with path
+			// TODO handle status endpoint
+
 			fmt.Fprintln(w, "Cannot handle requests without Host header, e.g., HTTP 1.0")
 			return
 		}
@@ -94,7 +100,7 @@ func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider) (*ProxyHttpSe
 			host, port = rhost, "80"
 		}
 
-		var svc *Service
+		var svc *servers.Service
 
 		if ip := net.ParseIP(host); ip == nil {
 			for svc = range (*s.list).QueryServices(host) {
@@ -136,10 +142,9 @@ func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider) (*ProxyHttpSe
 		proxy.ServeHTTP(w, req)
 	})
 
-	//proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
-
-	//proxy.OnRequest(goproxy.ReqHostMatches(regexp.MustCompile("^.*$"))).
-	//    HandleConnect(goproxy.AlwaysMitm)
+	//proxy.OnRequest(
+	//    goproxy.ReqHostMatches(regexp.MustCompile("^.*")),
+	//).HandleConnect(goproxy.AlwaysMitm)
 
 	proxy.OnRequest(goproxy.ReqHostMatches(regexp.MustCompile("^.*:80$"))).
 		HijackConnect(func(req *http.Request, client net.Conn, ctx *goproxy.ProxyCtx) {
@@ -159,7 +164,7 @@ func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider) (*ProxyHttpSe
 				host, port = req.URL.Host, "80"
 			}
 
-			var svc *Service
+			var svc *servers.Service
 			for svc = range (*s.list).QueryServices(host) {
 				break
 			}
@@ -216,7 +221,7 @@ func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider) (*ProxyHttpSe
 				host, port = req.URL.Host, "80"
 			}
 
-			var svc *Service
+			var svc *servers.Service
 			for svc = range (*s.list).QueryServices(host) {
 				break
 			}
@@ -260,7 +265,7 @@ func NewHTTPProxyServer(c *utils.Config, list ServiceListProvider) (*ProxyHttpSe
 }
 
 // AddService adds a new container and thus new DNS records
-func (s *ProxyHttpServer) AddService(id string, service *Service) error {
+func (s *ProxyHttpServer) AddService(id string, service *servers.Service) error {
 	if len(service.IPs) == 0 {
 		logger.Warningf("Service %s ignored: No IP provided:", service.Name)
 		return nil
@@ -349,7 +354,7 @@ func (s *ProxyHttpServer) Start() error {
 					host, port = tlsConn.Host(), "80"
 				}
 
-				var svc *Service
+				var svc *servers.Service
 				for svc = range (*s.list).QueryServices(host) {
 					break
 				}

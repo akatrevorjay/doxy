@@ -18,8 +18,11 @@ import (
 	"github.com/op/go-logging"
 
 	"github.com/akatrevorjay/doxy/core"
-	"github.com/akatrevorjay/doxy/servers"
 	"github.com/akatrevorjay/doxy/utils"
+
+	"github.com/akatrevorjay/doxy/servers"
+	"github.com/akatrevorjay/doxy/servers/dns"
+	"github.com/akatrevorjay/doxy/servers/http"
 )
 
 // GitSummary contains the version number
@@ -73,11 +76,11 @@ func main() {
 	list, err := servers.NewServiceMux(config)
 	orPanic(err)
 
-	dnsServer, err := servers.NewDNSServer(config, list)
+	dnsServer, err := dns.NewDNSServer(config, list)
 	orPanic(err)
 	list.RegisterHandler("dns", dnsServer)
 
-	httpProxyServer, err := servers.NewHTTPProxyServer(config, list)
+	httpProxyServer, err := http.NewHTTPProxyServer(config, list)
 	orPanic(err)
 	list.RegisterHandler("http", httpProxyServer)
 
