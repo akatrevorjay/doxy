@@ -1,8 +1,6 @@
 package http
 
 import (
-	"bytes"
-	"strings"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -11,6 +9,7 @@ import (
 	"net/http/httputil"
 	"sync"
 	"time"
+	//"io"
 
 	"github.com/akatrevorjay/doxy/servers"
 	"github.com/akatrevorjay/doxy/utils"
@@ -47,6 +46,8 @@ type Proxy struct {
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	logger.Debugf("Request: %v", r)
+
 	if r.Method == "CONNECT" {
 		p.serveConnect(w, r)
 		return
@@ -247,8 +248,8 @@ type ProxyHttpServer struct {
 	config *utils.Config
 	list   *servers.ServiceListProvider
 
-	mux *vhost.TLSMuxer
-	//muxHttp  *vhost.HTTPMuxer
+	muxTls *vhost.TLSMuxer
+	muxHttp  *vhost.HTTPMuxer
 
 	proxy *Proxy
 }
@@ -290,44 +291,9 @@ func NewHTTPProxyServer(c *utils.Config, list servers.ServiceListProvider) (*Pro
 	return s, nil
 }
 
-type cloudToButtResponse struct {
-	http.ResponseWriter
-
-	sub         bool
-	wroteHeader bool
-}
-
-func (w *cloudToButtResponse) WriteHeader(code int) {
-	if w.wroteHeader {
-		return
-	}
-	w.wroteHeader = true
-	ctype := w.Header().Get("Content-Type")
-	if strings.HasPrefix(ctype, "text/html") {
-		w.sub = true
-	}
-	w.ResponseWriter.WriteHeader(code)
-}
-
-var (
-	cloud = []byte("the cloud")
-	butt  = []byte("my   butt")
-)
-
-func (w *cloudToButtResponse) Write(p []byte) (int, error) {
-	if !w.wroteHeader {
-		w.WriteHeader(200)
-	}
-	if w.sub {
-		p = bytes.Replace(p, cloud, butt, -1)
-	}
-	return w.ResponseWriter.Write(p)
-}
-
 func cloudToButt(upstream http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r.Header.Set("Accept-Encoding", "")
-		upstream.ServeHTTP(&cloudToButtResponse{ResponseWriter: w}, r)
+		upstream.ServeHTTP(w, r)
 	})
 }
 
@@ -337,76 +303,145 @@ func (s *ProxyHttpServer) Start() error {
 
 	muxTimeout := 1 * time.Hour
 
-	go func() {
-		//mux, err := vhost.NewHTTPMuxer(ln, muxTimeout)
-		//orPanic(err)
+	lnHttp, err := net.Listen("tcp", s.config.HttpAddr)
+	if err != nil {
+		logger.Fatalf("Error listening for http connections: %v", err)
+	}
 
-		err := http.ListenAndServe(s.config.HttpAddr, s.proxy)
-		if err != nil {
-			logger.Fatalf("Error listening for http connections - %v", err)
-		}
-	}()
+	muxHttp, err := vhost.NewHTTPMuxer(lnHttp, muxTimeout)
+	orPanic(err)
+	s.muxHttp = muxHttp
 
-	go func() {
-		// listen to the TLS ClientHello but make it a CONNECT request instead
-		ln, err := net.Listen("tcp", s.config.HttpsAddr)
-		if err != nil {
-			logger.Fatalf("Error listening for https connections - %v", err)
-		}
-
-		mux, err := vhost.NewTLSMuxer(ln, muxTimeout)
+	go func(mux *vhost.HTTPMuxer) {
+		//muxLn, _ := mux.Listen("doxy.docker")
+		muxLn, err := mux.Listen("*.docker")
 		orPanic(err)
 
-		muxLn, _ := mux.Listen("doxy.docker")
+		err = http.Serve(muxLn, s.proxy)
+		orPanic(err)
+	}(muxHttp)
 
-		go func(ml net.Listener) {
-			for {
-				conn, err := ml.Accept()
-				orPanic(err)
+	go muxHttp.HandleErrors()
+	//go func(mux *vhost.HTTPMuxer) {
+	//    for {
+	//        conn, err := mux.NextError()
 
-				logger.Infof("conn: %v", conn)
+	//        switch err.(type) {
+	//        case vhost.BadRequest:
+	//            logger.Errorf("got a bad request! %v", err)
 
-				//go vh.Handle(conn)
+	//            conn.Write([]byte("bad request"))
 
-				conn.Close()
-			}
-		}(muxLn)
+	//        case vhost.NotFound:
+	//            logger.Errorf("got a connection for an unknown vhost %v", err)
+	//            conn.Write([]byte("vhost not found"))
 
-		s.mux = mux
+	//        case vhost.Closed:
+	//            logger.Errorf("closed conn: %v", err)
 
-		for {
-			conn, err := s.mux.NextError()
+	//        default:
+	//            logger.Errorf("server error: %v", err)
 
-			//buf := make([]byte, 0)
-			//conn.Read(buf)
-			//utils.Dump(buf)
+	//            if conn != nil {
+	//                conn.Write([]byte("server error"))
+	//            }
+	//        }
 
-			switch err.(type) {
-			case vhost.BadRequest:
-				logger.Errorf("got a bad request! %v", err)
+	//        if conn != nil {
+	//            conn.Close()
+	//        }
+	//    }
+	//}(muxHttp)
 
-				conn.Write([]byte("bad request"))
+	// listen to the TLS ClientHello but make it a CONNECT request instead
+	lnTls, err := net.Listen("tcp", s.config.HttpsAddr)
+	if err != nil {
+		logger.Fatalf("Error listening for https connections: %v", err)
+	}
 
-			case vhost.NotFound:
-				logger.Errorf("got a connection for an unknown vhost %v", err)
-				conn.Write([]byte("vhost not found"))
+	muxTls, err := vhost.NewTLSMuxer(lnTls, muxTimeout)
+	orPanic(err)
+	s.muxTls = muxTls
 
-			case vhost.Closed:
-				logger.Errorf("closed conn: %v", err)
+	go func(mux *vhost.TLSMuxer) {
+		//muxLn, _ := mux.Listen("doxy.docker")
+		muxLn, err := mux.Listen("*.docker")
+		orPanic(err)
 
-			default:
-				logger.Errorf("server error: %v", err)
+		//http.Serve(muxLn, s.proxy)
+		http.Serve(
+			muxLn,
+			http.HandlerFunc(
+				func(w http.ResponseWriter, r *http.Request) {
+					s.proxy.ServeHTTP(w, r)
+					//io.Copy(w, r.Body)
+				},
+			),
+		)
 
-				if conn != nil {
-					conn.Write([]byte("server error"))
-				}
-			}
+		//var (
+		//    err error
+		//    sconn *tls.Conn
+		//    sni_name, host, port string
+		//)
 
-			if conn != nil {
-				conn.Close()
-			}
-		}
-	}()
+		//for {
+		//    conn, err := muxLn.Accept()
+		//    if err != nil {
+		//        logger.Errorf("Error accepting conn=%v: %v", conn, err)
+		//        continue
+		//    }
+
+		//    sni_name = conn.Host()
+		//    if sni_name == "" {
+		//        logger.Errorf("Cannot support non-SNI enabled clients")
+		//        continue
+		//    }
+
+		//    go func(conn vhost.TLSConn) {
+		//        host, port, err := net.SplitHostPort(sni_name)
+		//        if err != nil {
+		//            host, port = sni_name, "80"
+		//        }
+
+		//        logger.Debugf("New connection %v => %v", conn.RemoteAddr(), sni_name)
+
+		//        conn.Close()
+		//    }(conn)
+		//}
+	}(muxTls)
+
+	go muxTls.HandleErrors()
+	//go func(mux *vhost.TLSMuxer) {
+	//    for {
+	//        conn, err := mux.NextError()
+
+	//        switch err.(type) {
+	//        case vhost.BadRequest:
+	//            logger.Errorf("got a bad request! %v", err)
+
+	//            conn.Write([]byte("bad request"))
+
+	//        case vhost.NotFound:
+	//            logger.Errorf("got a connection for an unknown vhost %v", err)
+	//            conn.Write([]byte("vhost not found"))
+
+	//        case vhost.Closed:
+	//            logger.Errorf("closed conn: %v", err)
+
+	//        default:
+	//            logger.Errorf("server error: %v", err)
+
+	//            if conn != nil {
+	//                conn.Write([]byte("server error"))
+	//            }
+	//        }
+
+	//        if conn != nil {
+	//            conn.Close()
+	//        }
+	//    }
+	//}(muxTls)
 
 	return nil
 }
