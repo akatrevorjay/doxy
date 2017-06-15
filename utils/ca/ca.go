@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/big"
-	"net"
 	"os"
 	"time"
+	"net"
 )
 
 func genPrivateKey(rsaBits int) *rsa.PrivateKey {

@@ -16,6 +16,7 @@ type ServiceMux struct {
 	config   *utils.Config
 	services map[string]*Service
 	handlers map[string]*ServiceHandler
+	domains  map[string]*Service
 }
 
 // NewServiceMux creates a new ServiceMux
