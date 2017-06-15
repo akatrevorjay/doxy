@@ -45,7 +45,7 @@ func genCert(ca *tls.Certificate, names []string) (*tls.Certificate, error) {
 		KeyUsage:              leafUsage,
 		BasicConstraintsValid: true,
 		DNSNames:              names,
-		SignatureAlgorithm:    x509.ECDSAWithSHA512,
+		//SignatureAlgorithm:    x509.ECDSAWithSHA512,
 	}
 	key, err := genKeyPair()
 	if err != nil {

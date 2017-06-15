@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"crypto/tls"
 	"encoding/pem"
 	"fmt"
 	"io/ioutil"
@@ -163,4 +164,15 @@ func ReadOrGenKeyPair(keyfile string, certfile string, bits int, dnsNames []stri
 	}
 
 	return privBytes, certBytes
+}
+
+// makeConfig makes a copy of a tls config if provided. Otherwise returns an
+// empty tls config.
+func makeConfig(template *tls.Config) *tls.Config {
+	tlsConfig := &tls.Config{}
+	if template != nil {
+		// Copy the provided tlsConfig
+		*tlsConfig = *template
+	}
+	return tlsConfig
 }

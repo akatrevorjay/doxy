@@ -1,21 +1,27 @@
 package http
 
 import (
+	//"bufio"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"sync"
 	"time"
-	//"io"
 
 	"github.com/akatrevorjay/doxy/servers"
 	"github.com/akatrevorjay/doxy/utils"
 	"github.com/akatrevorjay/doxy/utils/ca"
 
 	"github.com/inconshreveable/go-vhost"
+)
+
+const (
+	CONNECT = "CONNECT"
 )
 
 // Proxy is a forward proxy that substitutes its own certificate
@@ -48,7 +54,7 @@ type Proxy struct {
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	logger.Debugf("Request: %v", r)
 
-	if r.Method == "CONNECT" {
+	if r.Method == CONNECT {
 		p.serveConnect(w, r)
 		return
 	}
@@ -59,6 +65,23 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	p.Wrap(rp).ServeHTTP(w, r)
+}
+
+// makeConfig makes a copy of a tls config if provided. Otherwise returns an
+// empty tls config.
+func (p *Proxy) makeTlsConfig(template *tls.Config) *tls.Config {
+	tlsConfig := &tls.Config{}
+	if template != nil {
+		// Copy the provided tlsConfig
+		*tlsConfig = *template
+	}
+	return tlsConfig
+}
+
+func respBadGateway(resp http.ResponseWriter, msg string) {
+	log.Println(msg)
+	resp.WriteHeader(502)
+	resp.Write([]byte(msg))
 }
 
 func (p *Proxy) serveConnect(w http.ResponseWriter, r *http.Request) {
@@ -248,8 +271,8 @@ type ProxyHttpServer struct {
 	config *utils.Config
 	list   *servers.ServiceListProvider
 
-	muxTls *vhost.TLSMuxer
-	muxHttp  *vhost.HTTPMuxer
+	muxTls  *vhost.TLSMuxer
+	muxHttp *vhost.HTTPMuxer
 
 	proxy *Proxy
 }
@@ -283,7 +306,19 @@ func NewHTTPProxyServer(c *utils.Config, list servers.ServiceListProvider) (*Pro
 		CA: &ca,
 		TLSServerConfig: &tls.Config{
 			MinVersion: tls.VersionTLS12,
-			//CipherSuites: []uint16{tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA},
+			CipherSuites: []uint16{
+				tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+				tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+				tls.TLS_ECDHE_RSA_WITH_RC4_128_SHA,
+				tls.TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA,
+				tls.TLS_RSA_WITH_RC4_128_SHA,
+				tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA,
+				tls.TLS_RSA_WITH_AES_128_CBC_SHA,
+				tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+				tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+				tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			},
+			PreferServerCipherSuites: true,
 		},
 		Wrap: cloudToButt,
 	}
@@ -293,7 +328,8 @@ func NewHTTPProxyServer(c *utils.Config, list servers.ServiceListProvider) (*Pro
 
 func cloudToButt(upstream http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		upstream.ServeHTTP(w, r)
+		io.Copy(w, r.Body)
+		//upstream.ServeHTTP(w, r)
 	})
 }
 
@@ -307,141 +343,153 @@ func (s *ProxyHttpServer) Start() error {
 	if err != nil {
 		logger.Fatalf("Error listening for http connections: %v", err)
 	}
-
-	muxHttp, err := vhost.NewHTTPMuxer(lnHttp, muxTimeout)
-	orPanic(err)
-	s.muxHttp = muxHttp
-
-	go func(mux *vhost.HTTPMuxer) {
-		//muxLn, _ := mux.Listen("doxy.docker")
-		muxLn, err := mux.Listen("*.docker")
-		orPanic(err)
-
-		err = http.Serve(muxLn, s.proxy)
-		orPanic(err)
-	}(muxHttp)
-
-	go muxHttp.HandleErrors()
-	//go func(mux *vhost.HTTPMuxer) {
-	//    for {
-	//        conn, err := mux.NextError()
-
-	//        switch err.(type) {
-	//        case vhost.BadRequest:
-	//            logger.Errorf("got a bad request! %v", err)
-
-	//            conn.Write([]byte("bad request"))
-
-	//        case vhost.NotFound:
-	//            logger.Errorf("got a connection for an unknown vhost %v", err)
-	//            conn.Write([]byte("vhost not found"))
-
-	//        case vhost.Closed:
-	//            logger.Errorf("closed conn: %v", err)
-
-	//        default:
-	//            logger.Errorf("server error: %v", err)
-
-	//            if conn != nil {
-	//                conn.Write([]byte("server error"))
-	//            }
-	//        }
-
-	//        if conn != nil {
-	//            conn.Close()
-	//        }
-	//    }
-	//}(muxHttp)
-
-	// listen to the TLS ClientHello but make it a CONNECT request instead
 	lnTls, err := net.Listen("tcp", s.config.HttpsAddr)
 	if err != nil {
 		logger.Fatalf("Error listening for https connections: %v", err)
 	}
 
+	muxHttp, err := vhost.NewHTTPMuxer(lnHttp, muxTimeout)
+	orPanic(err)
 	muxTls, err := vhost.NewTLSMuxer(lnTls, muxTimeout)
 	orPanic(err)
+
+	go muxHttp.HandleErrors()
+	go muxTls.HandleErrors()
+
+	s.muxHttp = muxHttp
 	s.muxTls = muxTls
 
-	go func(mux *vhost.TLSMuxer) {
-		//muxLn, _ := mux.Listen("doxy.docker")
-		muxLn, err := mux.Listen("*.docker")
+	lnHttp, err1 := muxHttp.Listen("*.docker")
+	lnTls, err2 := muxTls.Listen("*.docker")
+	orPanic(err1)
+	orPanic(err2)
+
+	go func() {
+		var err error
+
+		err = http.Serve(lnHttp, s.proxy)
 		orPanic(err)
+	}()
 
-		//http.Serve(muxLn, s.proxy)
-		http.Serve(
-			muxLn,
-			http.HandlerFunc(
-				func(w http.ResponseWriter, r *http.Request) {
-					s.proxy.ServeHTTP(w, r)
-					//io.Copy(w, r.Body)
-				},
-			),
-		)
+	go func() {
+		//var err error
 
-		//var (
-		//    err error
-		//    sconn *tls.Conn
-		//    sni_name, host, port string
+		//err = http.Serve(
+		//    lnTls,
+		//    http.HandlerFunc(
+		//        func(w http.ResponseWriter, r *http.Request) {
+		//            logger.Debugf("Request: %v", r)
+
+		//            s.proxy.ServeHTTP(w, r)
+		//            //io.Copy(w, r.Body)
+		//        },
+		//    ),
 		//)
+		//orPanic(err)
 
-		//for {
-		//    conn, err := muxLn.Accept()
-		//    if err != nil {
-		//        logger.Errorf("Error accepting conn=%v: %v", conn, err)
-		//        continue
-		//    }
+		for {
+			conn, err := lnTls.Accept()
+			if err != nil {
+				logger.Errorf("Error accepting conn=%v: %v", conn, err)
+				continue
+			}
 
-		//    sni_name = conn.Host()
-		//    if sni_name == "" {
-		//        logger.Errorf("Cannot support non-SNI enabled clients")
-		//        continue
-		//    }
+			go func() {
+				var (
+					err   error
+					//sconn *tls.Conn
+				)
 
-		//    go func(conn vhost.TLSConn) {
-		//        host, port, err := net.SplitHostPort(sni_name)
-		//        if err != nil {
-		//            host, port = sni_name, "80"
-		//        }
+				tlsConn, err := vhost.TLS(conn)
+				if err != nil {
+					logger.Errorf("Error wrapping conn=%v: %v", conn, err)
+					panic(err)
+				}
 
-		//        logger.Debugf("New connection %v => %v", conn.RemoteAddr(), sni_name)
+				addr := tlsConn.Host()
+				if addr == "" {
+					logger.Errorf("Cannot support non-SNI enabled clients")
+					//http.Error(w, "no upstream", 503)
+					panic(err)
+				}
 
-		//        conn.Close()
-		//    }(conn)
-		//}
-	}(muxTls)
+				host, port, err := net.SplitHostPort(addr)
+				if err != nil {
+					host, port = addr, "80"
+				}
 
-	go muxTls.HandleErrors()
-	//go func(mux *vhost.TLSMuxer) {
-	//    for {
-	//        conn, err := mux.NextError()
+				logger.Debugf("New connection %v => %v", conn.RemoteAddr(), addr)
+				logger.Debugf("%v:%v", host, port)
 
-	//        switch err.(type) {
-	//        case vhost.BadRequest:
-	//            logger.Errorf("got a bad request! %v", err)
+				name := tlsConn.ClientHelloMsg.ServerName
+				provisionalCert, err := s.proxy.cert(name)
+				if err != nil {
+					logger.Errorf("Cert gen error: %v", err)
+					//http.Error(w, "no upstream", 503)
+					return
+				}
 
-	//            conn.Write([]byte("bad request"))
+				sConfig := s.proxy.makeTlsConfig(s.proxy.TLSServerConfig)
+				sConfig.Certificates = []tls.Certificate{*provisionalCert}
+				sConfig.GetCertificate = func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+					return s.proxy.cert(hello.ServerName)
+				}
 
-	//        case vhost.NotFound:
-	//            logger.Errorf("got a connection for an unknown vhost %v", err)
-	//            conn.Write([]byte("vhost not found"))
+				tlsConnIn := tls.Server(tlsConn, sConfig)
 
-	//        case vhost.Closed:
-	//            logger.Errorf("closed conn: %v", err)
+				// This listener allows us to http.Serve on the upgraded TLS connection
+				listener := &mitmListener{tlsConnIn}
 
-	//        default:
-	//            logger.Errorf("server error: %v", err)
+				// This Handler just fixes up the request URL to have the right protocol and
+				// host and then delegates to the wrapped Handler.
+				handler := http.HandlerFunc(func(resp2 http.ResponseWriter, req2 *http.Request) {
+					// Fix up the request URL to make it look as it would have if the client
+					// thought it were talking to a proxy at this point.
+					req2.URL.Scheme = "https"
+					req2.URL.Host = req2.Host
+					//wrapper.wrapped.ServeHTTP(resp2, req2)
+					s.proxy.ServeHTTP(resp2, req2)
+				})
 
-	//            if conn != nil {
-	//                conn.Write([]byte("server error"))
-	//            }
-	//        }
+				// Serve HTTP requests on the upgraded connection.  This will keep reading
+				// requests and sending them through our handler as long as the connection
+				// stays open.
+				go func() {
+					err = http.Serve(listener, handler)
+					if err != nil && err != io.EOF {
+						log.Printf("Error serving mitm'ed connection: %s", err)
+					}
+				}()
 
-	//        if conn != nil {
-	//            conn.Close()
-	//        }
-	//    }
-	//}(muxTls)
+				//cconn, err := handshake(w, sConfig)
+				//if err != nil {
+				//    logger.Errorf("handshake", addr, err)
+				//    return
+				//}
+				//defer cconn.Close()
+
+				//if sconn == nil {
+				//    logger.Errorf("could not determine cert addr for " + addr)
+				//    return
+				//}
+				//defer sconn.Close()
+
+				//od := &oneShotDialer{c: sconn}
+				//rp := &httputil.ReverseProxy{
+				//    Director:      httpsDirector,
+				//    Transport:     &http.Transport{DialTLS: od.Dial},
+				//    FlushInterval: s.proxy.FlushInterval,
+				//}
+
+				//ch := make(chan int)
+				//wc := &onCloseConn{cconn, func() { ch <- 0 }}
+				//http.Serve(&oneShotListener{wc}, s.proxy.Wrap(rp))
+				//<-ch
+
+				////defer conn.Close()
+			}()
+		}
+	}()
 
 	return nil
 }
