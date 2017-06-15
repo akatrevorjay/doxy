@@ -28,10 +28,6 @@ const (
 // for incoming TLS connections in place of the upstream server's
 // certificate.
 type Proxy struct {
-	// Wrap specifies a function for optionally wrapping upstream for
-	// inspecting the decrypted HTTP request and response.
-	Wrap func(upstream http.Handler) http.Handler
-
 	// CA specifies the root CA for generating leaf certs for each incoming
 	// TLS request.
 	CA *tls.Certificate
@@ -49,6 +45,10 @@ type Proxy struct {
 	// response body.
 	// If zero, no periodic flushing is done.
 	FlushInterval time.Duration
+
+	// Wrap specifies a function for optionally wrapping upstream for
+	// inspecting the decrypted HTTP request and response.
+	Wrap func(upstream http.Handler) http.Handler
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -321,6 +321,7 @@ func NewHTTPProxyServer(c *utils.Config, list servers.ServiceListProvider) (*Pro
 			PreferServerCipherSuites: true,
 		},
 		Wrap: cloudToButt,
+		Transport: http.Transport,
 	}
 
 	return s, nil
@@ -328,8 +329,8 @@ func NewHTTPProxyServer(c *utils.Config, list servers.ServiceListProvider) (*Pro
 
 func cloudToButt(upstream http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.Copy(w, r.Body)
-		//upstream.ServeHTTP(w, r)
+		//io.Copy(w, r.Body)
+		upstream.ServeHTTP(w, r)
 	})
 }
 
@@ -397,7 +398,6 @@ func (s *ProxyHttpServer) Start() error {
 			go func() {
 				var (
 					err   error
-					//sconn *tls.Conn
 				)
 
 				tlsConn, err := vhost.TLS(conn)
@@ -445,7 +445,7 @@ func (s *ProxyHttpServer) Start() error {
 				handler := http.HandlerFunc(func(resp2 http.ResponseWriter, req2 *http.Request) {
 					// Fix up the request URL to make it look as it would have if the client
 					// thought it were talking to a proxy at this point.
-					req2.URL.Scheme = "https"
+					req2.URL.Scheme = "http"
 					req2.URL.Host = req2.Host
 					//wrapper.wrapped.ServeHTTP(resp2, req2)
 					s.proxy.ServeHTTP(resp2, req2)
@@ -457,7 +457,7 @@ func (s *ProxyHttpServer) Start() error {
 				go func() {
 					err = http.Serve(listener, handler)
 					if err != nil && err != io.EOF {
-						log.Printf("Error serving mitm'ed connection: %s", err)
+						logger.Errorf("Error serving mitm'ed connection: %v", err)
 					}
 				}()
 
