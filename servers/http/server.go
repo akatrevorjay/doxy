@@ -4,14 +4,19 @@ import (
 	//"bufio"
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"strconv"
 	"sync"
 	"time"
+
+	"github.com/miekg/dns"
+
+	"github.com/docker/go-connections/nat"
 
 	"github.com/akatrevorjay/doxy/servers"
 	"github.com/akatrevorjay/doxy/utils"
@@ -49,6 +54,9 @@ type Proxy struct {
 	// Wrap specifies a function for optionally wrapping upstream for
 	// inspecting the decrypted HTTP request and response.
 	Wrap func(upstream http.Handler) http.Handler
+
+	//Timeout time.Duration
+	TLSHandshakeTimeout time.Duration
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -138,8 +146,12 @@ func (p *Proxy) serveConnect(w http.ResponseWriter, r *http.Request) {
 
 	od := &oneShotDialer{c: sconn}
 	rp := &httputil.ReverseProxy{
-		Director:      httpsDirector,
-		Transport:     &http.Transport{DialTLS: od.Dial},
+		Director: httpsDirector,
+		Transport: &http.Transport{
+			DialTLS:             od.Dial,
+			Dial:                od.Dial,
+			TLSHandshakeTimeout: p.TLSHandshakeTimeout,
+		},
 		FlushInterval: p.FlushInterval,
 	}
 
@@ -222,7 +234,7 @@ func (d *oneShotDialer) Dial(network, addr string) (net.Conn, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.c == nil {
-		return nil, errors.New("closed")
+		return nil, fmt.Errorf("closed %v network=%v addr=%v", d, network, addr)
 	}
 	c := d.c
 	d.c = nil
@@ -237,7 +249,7 @@ type oneShotListener struct {
 
 func (l *oneShotListener) Accept() (net.Conn, error) {
 	if l.c == nil {
-		return nil, errors.New("closed")
+		return nil, fmt.Errorf("closed %v", l)
 	}
 	c := l.c
 	l.c = nil
@@ -320,14 +332,15 @@ func NewHTTPProxyServer(c *utils.Config, list servers.ServiceListProvider) (*Pro
 			},
 			PreferServerCipherSuites: true,
 		},
-		Wrap: cloudToButt,
-		Transport: http.Transport,
+		Wrap: absolutelyNothingHandler,
+		//Timeout: 5 * time.Second,
+		TLSHandshakeTimeout: 5 * time.Second,
 	}
 
 	return s, nil
 }
 
-func cloudToButt(upstream http.Handler) http.Handler {
+func absolutelyNothingHandler(upstream http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		//io.Copy(w, r.Body)
 		upstream.ServeHTTP(w, r)
@@ -395,34 +408,40 @@ func (s *ProxyHttpServer) Start() error {
 				continue
 			}
 
-			go func() {
-				var (
-					err   error
-				)
-
+			go func(conn net.Conn) {
 				tlsConn, err := vhost.TLS(conn)
 				if err != nil {
 					logger.Errorf("Error wrapping conn=%v: %v", conn, err)
 					panic(err)
 				}
 
-				addr := tlsConn.Host()
-				if addr == "" {
-					logger.Errorf("Cannot support non-SNI enabled clients")
+				var (
+					origScheme string = "https"
+					origAddr   string = tlsConn.Host()
+					origName   string = tlsConn.ClientHelloMsg.ServerName
+				)
+
+				if origAddr == "" {
+					err = fmt.Errorf("Cannot support non-SNI enabled clients (no tlsConn.Host)")
 					//http.Error(w, "no upstream", 503)
 					panic(err)
 				}
 
-				host, port, err := net.SplitHostPort(addr)
-				if err != nil {
-					host, port = addr, "80"
+				if origName == "" {
+					err = fmt.Errorf("Cannot support non-SNI enabled clients (no tlsConn.ClientHelloMsg.ServerName)")
+					//http.Error(w, "no upstream", 503)
+					panic(err)
 				}
 
-				logger.Debugf("New connection %v => %v", conn.RemoteAddr(), addr)
-				logger.Debugf("%v:%v", host, port)
+				addr, scheme, err := s.adaptDestination(origName, origScheme)
+				if err != nil {
+					err = fmt.Errorf("Failed to adapt destination %s://%s tlsName=%s: %v", origScheme, origAddr, origName, err)
+					panic(err)
+				}
 
-				name := tlsConn.ClientHelloMsg.ServerName
-				provisionalCert, err := s.proxy.cert(name)
+				logger.Debugf("New connection %v => %s://%s", conn.RemoteAddr(), scheme, addr)
+
+				provisionalCert, err := s.proxy.cert(origName)
 				if err != nil {
 					logger.Errorf("Cert gen error: %v", err)
 					//http.Error(w, "no upstream", 503)
@@ -487,133 +506,92 @@ func (s *ProxyHttpServer) Start() error {
 				//<-ch
 
 				////defer conn.Close()
-			}()
+			}(conn)
 		}
 	}()
 
 	return nil
 }
 
-type VirtualHost struct {
-	domain string
+func (s *ProxyHttpServer) adaptDestination(addr string, scheme string) (newAddr string, newScheme string, err error) {
+	// TODO Look up from DNS
 
-	server *ProxyHttpServer
-	mux    *vhost.HTTPMuxer
-}
+	//host, port, err := net.SplitHostPort(addr)
+	//if err != nil {
+	//    logger.Debugf("Could not split host:port from addr=%v", addr)
 
-func (vh *VirtualHost) String() string {
-	return vh.domain
-}
+	//    host := addr
 
-func (vh *VirtualHost) Handle(conn net.Conn) {
-	logger.Infof("vh=%v conn=%v", vh, conn)
+	//    switch scheme {
+	//    case "http":
+	//        port = "80"
+	//        break
+	//    case "https":
+	//        port = "443"
+	//        break
+	//    }
+	//}
 
-	//req := &http.Request{
-	//	  Method: method,
-	//	  URL: &url.URL{
-	//		  Opaque: ,
-	//		  Host:	remoteHostport,
-	//	  },
-	//	  Host:	host,
-	//	  Header: make(http.Header),
+	var port int
 
-	//s.server.ServeHTTP()
-}
+	newAddr, newScheme = addr, scheme
 
-func (vh *VirtualHost) handleMuxLn(ml net.Listener) {
-	//_ := httputil.NewSingleHostReverseProxy("http://doxy.docker")
-
-	for {
-		conn, err := ml.Accept()
-		orPanic(err)
-
-		logger.Infof("conn: %v", conn)
-
-		go vh.Handle(conn)
-
-		conn.Close()
+	host, rawPort, err := net.SplitHostPort(addr)
+	if err == nil {
+		port, _ = nat.ParsePort(rawPort)
+	} else {
+		host = addr
 	}
+
+	if port == 0 {
+		switch scheme {
+		case "https":
+			port = 443
+			break
+		default:
+			port = 80
+			break
+		}
+	}
+
+	ip := net.ParseIP(host)
+	if ip != nil {
+		logger.Warningf("Not adapting IP: %s", ip)
+	} else {
+		var svc *servers.Service
+		for svc = range (*s.list).QueryServices(host) {
+			break
+		}
+
+		if svc == nil {
+			err = fmt.Errorf("Service not available by name: %v", addr)
+			return newAddr, newScheme, err
+		}
+
+		ip = svc.IPs[0]
+
+		if svc.HttpPort != 0 {
+			newScheme = "http"
+			port = svc.HttpPort
+		}
+
+		if svc.HttpsPreferred && svc.HttpsPort != 0 {
+			newScheme = "https"
+			port = svc.HttpsPort
+		}
+
+		if port == 0 || newScheme == "" {
+			err = fmt.Errorf("Service matched, but no ports matched requested scheme=%s service=%s", scheme, svc)
+			return newAddr, newScheme, err
+		}
+
+		newAddr = net.JoinHostPort(ip.String(), strconv.FormatInt(int64(port), 10))
+
+		logger.Debugf("Service available by name %s://%s => %s://%s", scheme, addr, newScheme, newAddr)
+	}
+
+	return newAddr, newScheme, nil
 }
-
-//go func(ln net.Listener) {
-//        for {
-//                conn, err := ln.Accept()
-//                if err != nil {
-//                        logger.Errorf("Error accepting new connection - %v", err)
-//                        continue
-//                }
-
-//                go func(conn net.Conn) {
-//                        tlsConn, err := vhost.TLS(conn)
-//                        if err != nil {
-//                                logger.Errorf("Error accepting new connection - %v", err)
-//                        }
-
-//                        if tlsConn.Host() == "" {
-//                                logger.Errorf("Cannot support non-SNI enabled clients")
-//                                return
-//                        }
-
-//                        host, port, err := net.SplitHostPort(tlsConn.Host())
-//                        if err != nil {
-//                                host, port = tlsConn.Host(), "80"
-//                        }
-//                        utils.Dump(host)
-//                        utils.Dump(port)
-
-//                        conn.Close()
-//                }(conn)
-//        }
-//}(ln)
-
-//type ProxyUserData struct {
-//    RequestID     string
-//    ContentLength int64
-//    SourceIP      string
-//}
-
-//func fuck() {
-//    var rhost, host, port string
-
-//    rhost = req.URL.Host
-//    if rhost == "" {
-//        rhost = req.Host
-//    }
-
-//    host, port, err := net.SplitHostPort(rhost)
-//    if err != nil {
-//        host, port = rhost, "80"
-//    }
-
-//    var svc *servers.Service
-
-//    if ip := net.ParseIP(host); ip == nil {
-//        for svc = range (*s.list).QueryServices(host) {
-//            break
-//        }
-
-//        if svc == nil {
-//            logger.Errorf("Service not available by name: %v", host)
-//            return
-//        }
-
-//        host = svc.IPs[0].String()
-
-//        // TODO HttpsPort
-//        port = svc.HttpPort
-//    }
-
-//    remoteHostport := net.JoinHostPort(host, port)
-
-//    utils.Dump(req)
-//    utils.Dump(remoteHostport)
-
-//    logger.Debugf("Service available by name: %v", host)
-
-//    // TODO Look up from DNS
-//    //remote, err := connectDial(proxy, "tcp", remoteHostport
-//    //orPanic(err)
-//}
 
 func (s *ProxyHttpServer) addProxyDomain(id string, domain string) {
 	// TODO Store for easier lookup
@@ -641,6 +619,10 @@ func (s *ProxyHttpServer) AddService(id string, service *servers.Service) error 
 
 	added := make([]string, 0)
 	for domain := range service.ListDomains(s.config.Domain.String(), false) {
+		if dns.IsSubDomain(s.config.Domain.String(), domain) {
+			continue
+		}
+
 		s.addProxyDomain(id, domain)
 
 		added = append(added, domain)
@@ -666,6 +648,10 @@ func (s *ProxyHttpServer) RemoveService(id string) error {
 
 	removed := make([]string, 0)
 	for domain := range service.ListDomains(s.config.Domain.String(), false) {
+		if dns.IsSubDomain(s.config.Domain.String(), domain) {
+			continue
+		}
+
 		s.removeProxyDomain(id, domain)
 
 		removed = append(removed, domain)

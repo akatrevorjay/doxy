@@ -27,8 +27,10 @@ type Service struct {
 	IPs   []net.IP
 	Ports nat.PortMap
 
-	HttpPort            string
-	HttpsPort           string
+	HttpPort int
+	HttpsPort int
+
+	HttpsPreferred bool
 	HttpsValidateCert   bool
 	ForwardHttpsToHttp  bool
 	RedirectHttpToHttps bool
@@ -41,6 +43,7 @@ func NewService() (*Service, error) {
 
 		TTL: -1,
 
+		HttpsPreferred: false,
 		RedirectHttpToHttps: false,
 		HttpsValidateCert:   false,
 		ForwardHttpsToHttp:  true,
@@ -51,8 +54,8 @@ func NewService() (*Service, error) {
 
 func (svc Service) String() string {
 	return fmt.Sprintf(
-		"Service{name=%s primary=%s aliases=%s ports=%s httpPort=%s ips=%s ttl=%d}",
-		svc.Name, svc.Primary, svc.Aliases, svc.Ports, svc.HttpPort, svc.IPs, svc.TTL,
+		"Service{name=%s primary=%s aliases=%s ports=%s ips=%s ttl=%d}",
+		svc.Name, svc.Primary, svc.Aliases, svc.Ports, svc.IPs, svc.TTL,
 	)
 }
 
@@ -127,16 +130,28 @@ func (svc *Service) ApplyOverride(k string, v string) error {
 		svc.IPs = addrs
 
 	case "httpport":
-		if _, err := strconv.Atoi(v); err != nil {
+		port, err := nat.ParsePort(v)
+		if err != nil {
 			return err
 		}
-		svc.HttpPort = v
+
+		svc.HttpPort = port
 
 	case "httpsport":
-		if _, err := strconv.Atoi(v); err != nil {
+		port, err := nat.ParsePort(v)
+		if err != nil {
 			return err
 		}
-		svc.HttpsPort = v
+
+		svc.HttpsPort = port
+
+	case "httpspreferred":
+		bv, err := strconv.ParseBool(v)
+		if err != nil {
+			return err
+		}
+
+		svc.HttpsPreferred = bv
 
 	case "redirecthttptohttps":
 		bv, err := strconv.ParseBool(v)

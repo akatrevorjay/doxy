@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"golang.org/x/net/context"
+	"github.com/docker/go-connections/nat"
 
 	"github.com/akatrevorjay/doxy/servers"
 	"github.com/akatrevorjay/doxy/utils"
@@ -43,7 +44,7 @@ func NewDockerManager(c *utils.Config, list servers.ServiceListProvider, tlsConf
 
 // Start starts the DockerManager
 func (d *DockerManager) Start() error {
-	logger.Infof("Starting DockerManager.")
+	logger.Infof("Starting %v", d)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	d.cancel = cancel
@@ -62,11 +63,11 @@ func (d *DockerManager) Start() error {
 
 // AddExisting Adds existing containers
 func (d *DockerManager) AddExisting() error {
-	logger.Infof("Adding existing containers")
+	logger.Infof("Adding existing containers to service list, just a moment.")
 
 	containers, err := d.client.ContainerList(context.Background(), types.ContainerListOptions{})
 	if err != nil {
-		return errors.New("Error getting containers: " + err.Error())
+		return errors.New("Error getting list of containers: " + err.Error())
 	}
 
 	for _, container := range containers {
@@ -78,13 +79,14 @@ func (d *DockerManager) AddExisting() error {
 
 		svc, err := d.createService(container.ID)
 		if err != nil {
-			logger.Errorf("%s", err)
+			logger.Errorf("Failed to create service object id=%s: %s", container.ID, err)
 			continue
 		}
 
 		err = (*d.list).AddService(container.ID, svc)
 		if err != nil {
-			logger.Errorf("Failed to add svc id=%s: %s", container.ID, err)
+			logger.Errorf("Failed to add service to list provider id=%s service=%v: %s", container.ID, svc, err)
+			continue
 		}
 	}
 
@@ -207,20 +209,32 @@ func (d *DockerManager) createService(id string) (*servers.Service, error) {
 	for src := range desc.NetworkSettings.Ports {
 		switch src.Proto() {
 		case "tcp":
-			switch src.Port() {
-			case "80":
-				svc.HttpPort = src.Port()
-			case "8000", "8080":
-				if svc.HttpPort == "" {
-					svc.HttpPort = src.Port()
-				}
+			rawPort := src.Port()
+			port, err := nat.ParsePort(rawPort)
+			if err != nil {
+				logger.Errorf("Could not parse port=%s: %v", rawPort, err)
+				continue
+			}
 
-			case "443":
-				svc.HttpsPort = src.Port()
-			case "8443":
-				if svc.HttpsPort == "" {
-					svc.HttpsPort = src.Port()
+			switch port {
+			case 80:
+				svc.HttpPort = port
+				break
+			case 443:
+				svc.HttpsPort = port
+				break
+
+			case 8000, 8080:
+				if svc.HttpPort == 0 {
+					svc.HttpPort = port
 				}
+				break
+
+			case 8443:
+				if svc.HttpsPort == 0 {
+					svc.HttpsPort = port
+				}
+				break
 			}
 		}
 	}
@@ -244,7 +258,7 @@ func (d *DockerManager) createService(id string) (*servers.Service, error) {
 		}
 	}
 
-	logger.Infof("Created svc: %s", svc)
+	logger.Infof("Created svc: %v", svc)
 
 	return svc, nil
 }
