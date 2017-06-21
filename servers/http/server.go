@@ -17,6 +17,7 @@ import (
 	"github.com/miekg/dns"
 
 	"github.com/docker/go-connections/nat"
+	//"github.com/abursavich/nett"
 
 	"github.com/akatrevorjay/doxy/servers"
 	"github.com/akatrevorjay/doxy/utils"
@@ -57,6 +58,9 @@ type Proxy struct {
 
 	//Timeout time.Duration
 	TLSHandshakeTimeout time.Duration
+
+	httpDirector  func(*http.Request)
+	httpsDirector func(*http.Request)
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -67,9 +71,25 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	//dialer := &nett.Dialer{
+	//    // Cache successful DNS lookups for five minutes
+	//    // using DefaultResolver to fill the cache.
+	//    Resolver: &nett.CacheResolver{TTL: 5 * time.Minute},
+	//    // Concurrently dial an IPv4 and an IPv6 address and
+	//    // return the connection that is established first.
+	//    IPFilter: nett.DualStack,
+	//    // Give up after ten seconds including DNS resolution.
+	//    Timeout: 10 * time.Second,
+	//}
+
 	rp := &httputil.ReverseProxy{
-		Director:      httpDirector,
+		Director:      p.httpDirector,
 		FlushInterval: p.FlushInterval,
+		Transport: &http.Transport{
+			//DialTLS:             dialer.Dial,
+			//Dial:                dialer.Dial,
+			TLSHandshakeTimeout: p.TLSHandshakeTimeout,
+		},
 	}
 
 	p.Wrap(rp).ServeHTTP(w, r)
@@ -146,7 +166,7 @@ func (p *Proxy) serveConnect(w http.ResponseWriter, r *http.Request) {
 
 	od := &oneShotDialer{c: sconn}
 	rp := &httputil.ReverseProxy{
-		Director: httpsDirector,
+		Director: p.httpsDirector,
 		Transport: &http.Transport{
 			DialTLS:             od.Dial,
 			Dial:                od.Dial,
@@ -190,14 +210,66 @@ func handshake(w http.ResponseWriter, config *tls.Config) (net.Conn, error) {
 	return conn, nil
 }
 
-func httpDirector(r *http.Request) {
+func (s *ProxyHttpServer) httpDirector(r *http.Request) {
 	r.URL.Host = r.Host
 	r.URL.Scheme = "http"
+
+	var (
+		origScheme string = r.URL.Scheme
+		origAddr   string = r.URL.Host
+		err        error
+	)
+
+	if origAddr == "" {
+		err = fmt.Errorf("Cannot support requests without a Host (origAddr=%v)", origAddr)
+		//http.Error(w, "no upstream", 503)
+		panic(err)
+	}
+
+	addr, scheme, err := s.adaptDestination(origAddr, origScheme)
+	if err != nil {
+		err = fmt.Errorf("Failed to adapt destination %s://%s: %v", origScheme, origAddr, err)
+		panic(err)
+	}
+
+	//logger.Debugf("New connection %v => %s://%s", conn.RemoteAddr(), scheme, addr)
+
+	// Fix up the request URL to make it look as it would have if the client
+	// thought it were talking to a proxy at this point.
+	r.URL.Scheme = scheme
+	r.Host = addr
+	r.URL.Host = r.Host
 }
 
-func httpsDirector(r *http.Request) {
+func (s *ProxyHttpServer) httpsDirector(r *http.Request) {
 	r.URL.Host = r.Host
 	r.URL.Scheme = "https"
+
+	var (
+		origScheme string = r.URL.Scheme
+		origAddr   string = r.URL.Host
+		err        error
+	)
+
+	if origAddr == "" {
+		err = fmt.Errorf("Cannot support requests without a Host (origAddr=%v)", origAddr)
+		//http.Error(w, "no upstream", 503)
+		panic(err)
+	}
+
+	addr, scheme, err := s.adaptDestination(origAddr, origScheme)
+	if err != nil {
+		err = fmt.Errorf("Failed to adapt destination %s://%s: %v", origScheme, origAddr, err)
+		panic(err)
+	}
+
+	//logger.Debugf("New connection %v => %s://%s", conn.RemoteAddr(), scheme, addr)
+
+	// Fix up the request URL to make it look as it would have if the client
+	// thought it were talking to a proxy at this point.
+	r.URL.Scheme = scheme
+	r.Host = addr
+	r.URL.Host = r.Host
 }
 
 // dnsName returns the DNS name in addr, if any.
@@ -335,6 +407,9 @@ func NewHTTPProxyServer(c *utils.Config, list servers.ServiceListProvider) (*Pro
 		Wrap: absolutelyNothingHandler,
 		//Timeout: 5 * time.Second,
 		TLSHandshakeTimeout: 5 * time.Second,
+
+		httpDirector:  s.httpDirector,
+		httpsDirector: s.httpsDirector,
 	}
 
 	return s, nil
@@ -386,21 +461,6 @@ func (s *ProxyHttpServer) Start() error {
 	}()
 
 	go func() {
-		//var err error
-
-		//err = http.Serve(
-		//    lnTls,
-		//    http.HandlerFunc(
-		//        func(w http.ResponseWriter, r *http.Request) {
-		//            logger.Debugf("Request: %v", r)
-
-		//            s.proxy.ServeHTTP(w, r)
-		//            //io.Copy(w, r.Body)
-		//        },
-		//    ),
-		//)
-		//orPanic(err)
-
 		for {
 			conn, err := lnTls.Accept()
 			if err != nil {
@@ -416,9 +476,9 @@ func (s *ProxyHttpServer) Start() error {
 				}
 
 				var (
-					origScheme string = "https"
-					origAddr   string = tlsConn.Host()
-					origName   string = tlsConn.ClientHelloMsg.ServerName
+					//origScheme string = "https"
+					origAddr string = tlsConn.Host()
+					origName string = tlsConn.ClientHelloMsg.ServerName
 				)
 
 				if origAddr == "" {
@@ -432,14 +492,6 @@ func (s *ProxyHttpServer) Start() error {
 					//http.Error(w, "no upstream", 503)
 					panic(err)
 				}
-
-				addr, scheme, err := s.adaptDestination(origName, origScheme)
-				if err != nil {
-					err = fmt.Errorf("Failed to adapt destination %s://%s tlsName=%s: %v", origScheme, origAddr, origName, err)
-					panic(err)
-				}
-
-				logger.Debugf("New connection %v => %s://%s", conn.RemoteAddr(), scheme, addr)
 
 				provisionalCert, err := s.proxy.cert(origName)
 				if err != nil {
@@ -459,53 +511,15 @@ func (s *ProxyHttpServer) Start() error {
 				// This listener allows us to http.Serve on the upgraded TLS connection
 				listener := &mitmListener{tlsConnIn}
 
-				// This Handler just fixes up the request URL to have the right protocol and
-				// host and then delegates to the wrapped Handler.
-				handler := http.HandlerFunc(func(resp2 http.ResponseWriter, req2 *http.Request) {
-					// Fix up the request URL to make it look as it would have if the client
-					// thought it were talking to a proxy at this point.
-					req2.URL.Scheme = "http"
-					req2.URL.Host = req2.Host
-					//wrapper.wrapped.ServeHTTP(resp2, req2)
-					s.proxy.ServeHTTP(resp2, req2)
-				})
-
 				// Serve HTTP requests on the upgraded connection.  This will keep reading
 				// requests and sending them through our handler as long as the connection
 				// stays open.
 				go func() {
-					err = http.Serve(listener, handler)
+					err = http.Serve(listener, s.proxy)
 					if err != nil && err != io.EOF {
 						logger.Errorf("Error serving mitm'ed connection: %v", err)
 					}
 				}()
-
-				//cconn, err := handshake(w, sConfig)
-				//if err != nil {
-				//    logger.Errorf("handshake", addr, err)
-				//    return
-				//}
-				//defer cconn.Close()
-
-				//if sconn == nil {
-				//    logger.Errorf("could not determine cert addr for " + addr)
-				//    return
-				//}
-				//defer sconn.Close()
-
-				//od := &oneShotDialer{c: sconn}
-				//rp := &httputil.ReverseProxy{
-				//    Director:      httpsDirector,
-				//    Transport:     &http.Transport{DialTLS: od.Dial},
-				//    FlushInterval: s.proxy.FlushInterval,
-				//}
-
-				//ch := make(chan int)
-				//wc := &onCloseConn{cconn, func() { ch <- 0 }}
-				//http.Serve(&oneShotListener{wc}, s.proxy.Wrap(rp))
-				//<-ch
-
-				////defer conn.Close()
 			}(conn)
 		}
 	}()
@@ -513,25 +527,8 @@ func (s *ProxyHttpServer) Start() error {
 	return nil
 }
 
+// TODO Look up from DNS
 func (s *ProxyHttpServer) adaptDestination(addr string, scheme string) (newAddr string, newScheme string, err error) {
-	// TODO Look up from DNS
-
-	//host, port, err := net.SplitHostPort(addr)
-	//if err != nil {
-	//    logger.Debugf("Could not split host:port from addr=%v", addr)
-
-	//    host := addr
-
-	//    switch scheme {
-	//    case "http":
-	//        port = "80"
-	//        break
-	//    case "https":
-	//        port = "443"
-	//        break
-	//    }
-	//}
-
 	var port int
 
 	newAddr, newScheme = addr, scheme
@@ -610,7 +607,7 @@ func (s *ProxyHttpServer) addProxyDomain(id string, domain string) {
 func (s *ProxyHttpServer) removeProxyDomain(id string, domain string) {
 }
 
-// AddService adds a new container and thus new DNS records
+// AddService adds a new container
 func (s *ProxyHttpServer) AddService(id string, service *servers.Service) error {
 	if len(service.IPs) == 0 {
 		logger.Warningf("Service %s ignored: No IP provided:", service.Name)
@@ -633,7 +630,7 @@ func (s *ProxyHttpServer) AddService(id string, service *servers.Service) error 
 	return nil
 }
 
-// RemoveService removes a new container and thus DNS records
+// RemoveService removes a new container
 func (s *ProxyHttpServer) RemoveService(id string) error {
 	service, err := (*s.list).GetService(id)
 	if err != nil {

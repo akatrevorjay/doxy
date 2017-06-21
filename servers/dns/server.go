@@ -59,14 +59,15 @@ func NewDNSServer(c *utils.Config, list servers.ServiceListProvider) (*DNSServer
 }
 
 func (s *DNSServer) clientLoadResolvconf() {
-	resolvconf_path := "/etc/resolv.conf"
-	cc, err := dns.ClientConfigFromFile(resolvconf_path)
+	var resolvconf string = "/etc/resolv.conf"
+
+	cc, err := dns.ClientConfigFromFile(resolvconf)
 	if err != nil {
 		logger.Errorf("error parsing resolv.conf: %v", err)
 	}
 
 	if len(cc.Servers) > 0 {
-		logger.Infof("Loaded %d upstream DNS servers from %s: %s", len(cc.Servers), resolvconf_path, cc.Servers)
+		logger.Infof("Loaded %d upstream DNS servers from %s: %s", len(cc.Servers), resolvconf, cc.Servers)
 	}
 }
 
