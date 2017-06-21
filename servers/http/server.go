@@ -553,6 +553,10 @@ func (s *ProxyHttpServer) adaptDestination(addr string, scheme string) (newAddr 
 			return newAddr, newScheme, err
 		}
 
+		if len(svc.IPs) < 1 {
+			err = fmt.Errorf("Service does not have an IP: %v", svc)
+			return newAddr, newScheme, err
+		}
 		ip = svc.IPs[0]
 
 		if svc.HttpPort != 0 {
