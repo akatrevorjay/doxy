@@ -64,6 +64,14 @@ type Proxy struct {
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Make it appear like a proxied request
+	if r.Method == CONNECT {
+		r.URL.Scheme = "https"
+	} else {
+		r.URL.Scheme = "http"
+	}
+	r.URL.Host = r.Host
+
 	logger.Debugf("Request: %v", r)
 
 	if r.Method == CONNECT {
@@ -210,10 +218,7 @@ func handshake(w http.ResponseWriter, config *tls.Config) (net.Conn, error) {
 	return conn, nil
 }
 
-func (s *ProxyHttpServer) httpDirector(r *http.Request) {
-	r.URL.Host = r.Host
-	r.URL.Scheme = "http"
-
+func (s *ProxyHttpServer) adaptDestinationRequest(r *http.Request) {
 	var (
 		origScheme string = r.URL.Scheme
 		origAddr   string = r.URL.Host
@@ -241,35 +246,18 @@ func (s *ProxyHttpServer) httpDirector(r *http.Request) {
 	r.URL.Host = r.Host
 }
 
+func (s *ProxyHttpServer) httpDirector(r *http.Request) {
+	r.URL.Host = r.Host
+	r.URL.Scheme = "http"
+
+	s.adaptDestinationRequest(r)
+}
+
 func (s *ProxyHttpServer) httpsDirector(r *http.Request) {
 	r.URL.Host = r.Host
 	r.URL.Scheme = "https"
 
-	var (
-		origScheme string = r.URL.Scheme
-		origAddr   string = r.URL.Host
-		err        error
-	)
-
-	if origAddr == "" {
-		err = fmt.Errorf("Cannot support requests without a Host (origAddr=%v)", origAddr)
-		//http.Error(w, "no upstream", 503)
-		panic(err)
-	}
-
-	addr, scheme, err := s.adaptDestination(origAddr, origScheme)
-	if err != nil {
-		err = fmt.Errorf("Failed to adapt destination %s://%s: %v", origScheme, origAddr, err)
-		panic(err)
-	}
-
-	//logger.Debugf("New connection %v => %s://%s", conn.RemoteAddr(), scheme, addr)
-
-	// Fix up the request URL to make it look as it would have if the client
-	// thought it were talking to a proxy at this point.
-	r.URL.Scheme = scheme
-	r.Host = addr
-	r.URL.Host = r.Host
+	s.adaptDestinationRequest(r)
 }
 
 // dnsName returns the DNS name in addr, if any.
