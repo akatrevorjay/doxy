@@ -1,10 +1,10 @@
 package socks
 
 import (
+	"fmt"
 	"net"
 	"strconv"
 	"time"
-	"fmt"
 
 	"github.com/akatrevorjay/doxy/servers"
 	"github.com/akatrevorjay/doxy/utils"
@@ -59,13 +59,33 @@ func (s *SocksProxy) adaptDestinationRequest(r *socks.Request) {
 		host = r.IP.String()
 	}
 
-	var origScheme string = "socks"
-	var origAddr string = net.JoinHostPort(host, strconv.Itoa(port))
+	//var origScheme string = "socks"
+	//var origAddr string = net.JoinHostPort(host, strconv.Itoa(port))
 
-	newAddr, _, err := s.adaptDestination(origAddr, origScheme)
-	if err != nil {
-		err := fmt.Errorf("Failed to adapt destination %s://%s: %v", origScheme, origAddr, err)
-		panic(err)
+	//newAddr, _, err := s.adaptDestination(origAddr, origScheme)
+	//if err != nil {
+	//	  err := fmt.Errorf("Failed to adapt destination %s://%s: %v", origScheme, origAddr, err)
+	//	  panic(err)
+	//}
+
+	//newHost, newPortstr, err := net.SplitHostPort(newAddr)
+	//orPanic(err)
+	//newPort, err := strconv.Atoi(newPortstr)
+	//orPanic(err)
+
+	//logger.Debugf("New connection %v => %s://%s", conn.RemoteAddr(), scheme, addr)
+
+	//r.Hostname = newHost
+	//r.Port = newPort
+
+	var newAddr string
+	switch r.Port {
+	case 80:
+		newAddr = s.config.HttpAddr
+		break
+	case 443:
+		newAddr = s.config.HttpsAddr
+		break
 	}
 
 	newHost, newPortstr, err := net.SplitHostPort(newAddr)

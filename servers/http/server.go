@@ -414,8 +414,6 @@ func absolutelyNothingHandler(upstream http.Handler) http.Handler {
 func (s *HTTPProxy) Start() error {
 	logger.Infof("Starting HTTPProxy; listening on http=%s https=%s.", s.config.HttpAddr, s.config.HttpsAddr)
 
-	muxTimeout := 1 * time.Hour
-
 	lnHttp, err := net.Listen("tcp", s.config.HttpAddr)
 	if err != nil {
 		logger.Fatalf("Error listening for http connections: %v", err)
@@ -424,22 +422,6 @@ func (s *HTTPProxy) Start() error {
 	if err != nil {
 		logger.Fatalf("Error listening for https connections: %v", err)
 	}
-
-	muxHttp, err := vhost.NewHTTPMuxer(lnHttp, muxTimeout)
-	orPanic(err)
-	muxTls, err := vhost.NewTLSMuxer(lnTls, muxTimeout)
-	orPanic(err)
-
-	go muxHttp.HandleErrors()
-	go muxTls.HandleErrors()
-
-	s.muxHttp = muxHttp
-	s.muxTls = muxTls
-
-	lnHttp, err1 := muxHttp.Listen("*")
-	lnTls, err2 := muxTls.Listen("*")
-	orPanic(err1)
-	orPanic(err2)
 
 	go func() {
 		var err error
