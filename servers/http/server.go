@@ -218,7 +218,7 @@ func handshake(w http.ResponseWriter, config *tls.Config) (net.Conn, error) {
 	return conn, nil
 }
 
-func (s *ProxyHttpServer) adaptDestinationRequest(r *http.Request) {
+func (s *HTTPProxy) adaptDestinationRequest(r *http.Request) {
 	var (
 		origScheme string = r.URL.Scheme
 		origAddr   string = r.URL.Host
@@ -246,14 +246,14 @@ func (s *ProxyHttpServer) adaptDestinationRequest(r *http.Request) {
 	r.URL.Host = r.Host
 }
 
-func (s *ProxyHttpServer) httpDirector(r *http.Request) {
+func (s *HTTPProxy) httpDirector(r *http.Request) {
 	r.URL.Host = r.Host
 	r.URL.Scheme = "http"
 
 	s.adaptDestinationRequest(r)
 }
 
-func (s *ProxyHttpServer) httpsDirector(r *http.Request) {
+func (s *HTTPProxy) httpsDirector(r *http.Request) {
 	r.URL.Host = r.Host
 	r.URL.Scheme = "https"
 
@@ -338,8 +338,8 @@ func (c *onCloseConn) Close() error {
 	return c.Conn.Close()
 }
 
-// ProxyHTTPServer represents the proxy endpoint
-type ProxyHttpServer struct {
+// HTTPProxy represents the proxy endpoint
+type HTTPProxy struct {
 	config *utils.Config
 	list   *servers.ServiceListProvider
 
@@ -349,7 +349,7 @@ type ProxyHttpServer struct {
 	proxy *Proxy
 }
 
-func (s *ProxyHttpServer) tlsSetup() tls.Certificate {
+func (s *HTTPProxy) tlsSetup() tls.Certificate {
 	var dnsNames []string
 	dnsNames = append(dnsNames, s.config.Name)
 	logger.Debugf("dnsNames: %v", dnsNames)
@@ -366,8 +366,8 @@ func (s *ProxyHttpServer) tlsSetup() tls.Certificate {
 	return ca
 }
 
-func NewHTTPProxyServer(c *utils.Config, list servers.ServiceListProvider) (*ProxyHttpServer, error) {
-	s := &ProxyHttpServer{
+func NewHTTPProxy(c *utils.Config, list servers.ServiceListProvider) (*HTTPProxy, error) {
+	s := &HTTPProxy{
 		config: c,
 		list:   &list,
 	}
@@ -411,8 +411,8 @@ func absolutelyNothingHandler(upstream http.Handler) http.Handler {
 }
 
 // Start starts the http endpoints
-func (s *ProxyHttpServer) Start() error {
-	logger.Infof("Starting ProxyHttpServer; listening on http=%s https=%s.", s.config.HttpAddr, s.config.HttpsAddr)
+func (s *HTTPProxy) Start() error {
+	logger.Infof("Starting HTTPProxy; listening on http=%s https=%s.", s.config.HttpAddr, s.config.HttpsAddr)
 
 	muxTimeout := 1 * time.Hour
 
@@ -436,8 +436,8 @@ func (s *ProxyHttpServer) Start() error {
 	s.muxHttp = muxHttp
 	s.muxTls = muxTls
 
-	lnHttp, err1 := muxHttp.Listen("*.docker")
-	lnTls, err2 := muxTls.Listen("*.docker")
+	lnHttp, err1 := muxHttp.Listen("*")
+	lnTls, err2 := muxTls.Listen("*")
 	orPanic(err1)
 	orPanic(err2)
 
@@ -516,7 +516,7 @@ func (s *ProxyHttpServer) Start() error {
 }
 
 // TODO Look up from DNS
-func (s *ProxyHttpServer) adaptDestination(addr string, scheme string) (newAddr string, newScheme string, err error) {
+func (s *HTTPProxy) adaptDestination(addr string, scheme string) (newAddr string, newScheme string, err error) {
 	var port int
 
 	newAddr, newScheme = addr, scheme
@@ -576,13 +576,13 @@ func (s *ProxyHttpServer) adaptDestination(addr string, scheme string) (newAddr 
 
 		newAddr = net.JoinHostPort(ip.String(), strconv.FormatInt(int64(port), 10))
 
-		logger.Debugf("Service available by name %s://%s => %s://%s", scheme, addr, newScheme, newAddr)
+		logger.Debugf("Adapted request dest: %s://%s => %s://%s", scheme, addr, newScheme, newAddr)
 	}
 
 	return newAddr, newScheme, nil
 }
 
-func (s *ProxyHttpServer) addProxyDomain(id string, domain string) {
+func (s *HTTPProxy) addProxyDomain(id string, domain string) {
 	// TODO Store for easier lookup
 
 	//ml, err := s.mux.Listen(domain)
@@ -596,11 +596,11 @@ func (s *ProxyHttpServer) addProxyDomain(id string, domain string) {
 	//}(vh, ml)
 }
 
-func (s *ProxyHttpServer) removeProxyDomain(id string, domain string) {
+func (s *HTTPProxy) removeProxyDomain(id string, domain string) {
 }
 
 // AddService adds a new container
-func (s *ProxyHttpServer) AddService(id string, service *servers.Service) error {
+func (s *HTTPProxy) AddService(id string, service *servers.Service) error {
 	if len(service.IPs) == 0 {
 		logger.Warningf("Service %s ignored: No IP provided:", service.Name)
 		return nil
@@ -623,7 +623,7 @@ func (s *ProxyHttpServer) AddService(id string, service *servers.Service) error 
 }
 
 // RemoveService removes a new container
-func (s *ProxyHttpServer) RemoveService(id string) error {
+func (s *HTTPProxy) RemoveService(id string) error {
 	service, err := (*s.list).GetService(id)
 	if err != nil {
 		logger.Errorf("Cannot remove a service that doesn't already exist. id=%s", id)

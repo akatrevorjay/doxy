@@ -37,9 +37,10 @@ func (cmdline *CommandLine) ParseParameters(rawParams []string) (res *utils.Conf
 	verbose := cmdline.app.Flag("verbose", "Verbose mode.").Default(strconv.FormatBool(res.Verbose)).Short('v').Bool()
 	quiet := cmdline.app.Flag("quiet", "Quiet mode.").Default(strconv.FormatBool(res.Quiet)).Short('q').Bool()
 
-	http := cmdline.app.Flag("http", "Listen HTTP requests on this address").Default(res.HttpAddr).Short('H').String()
-	https := cmdline.app.Flag("https", "Listen HTTPS requests on this address").Default(res.HttpsAddr).Short('I').String()
-	dns := cmdline.app.Flag("dns", "Listen DNS requests on this address").Default(res.DnsAddr).Short('D').String()
+	http := cmdline.app.Flag("http", "Listen for HTTP requests on this address").Default(res.HttpAddr).Short('H').String()
+	https := cmdline.app.Flag("https", "Listen for HTTPS requests on this address").Default(res.HttpsAddr).Short('I').String()
+	dns := cmdline.app.Flag("dns", "Listen for DNS requests on this address").Default(res.DnsAddr).Short('D').String()
+	socks := cmdline.app.Flag("socks", "Listen for Socks requests on this address").Default(res.SocksAddr).Short('S').String()
 
 	domain := cmdline.app.Flag("domain", "Domain that is appended to all requests").Default(res.Domain.String()).String()
 	environment := cmdline.app.Flag("environment", "Optional context before domain suffix").Default("").String()
@@ -70,6 +71,7 @@ func (cmdline *CommandLine) ParseParameters(rawParams []string) (res *utils.Conf
 	res.DnsAddr = *dns
 	res.HttpAddr = *http
 	res.HttpsAddr = *https
+	res.SocksAddr = *socks
 	res.Domain = utils.NewDomain(fmt.Sprintf("%s.%s", *environment, *domain))
 	res.DockerHost = *docker
 	res.DockerTlsVerify = *dockertlsverify

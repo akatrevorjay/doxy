@@ -1,5 +1,5 @@
-hash: c3ace969ce7ddae133f0e0d30acb10f026952636b27b31d89aa7067944eb37f9
-updated: 2017-05-25T15:23:56.767861974-07:00
+hash: 26543e920ff67d61c3ec0faa557dd1139af65798944536ab8e10f75cb6e17515
+updated: 2017-06-21T19:30:45.730724808-07:00
 imports:
 - name: github.com/alecthomas/template
   version: a0175ee3bccc567396460bf5acd36800cb10c49c
@@ -7,6 +7,16 @@ imports:
   - parse
 - name: github.com/alecthomas/units
   version: 2efee857e7cfd4f3d0138cc3cbb1b4966962b93a
+- name: github.com/cybozu-go/cmd
+  version: 8d1ed337c3fbd89755769e1c2384fb66b76e4961
+- name: github.com/cybozu-go/log
+  version: 255a1a56ed921cf489010e04766b30070a9bb59b
+- name: github.com/cybozu-go/netutil
+  version: 2fcba33d781f20505e4cb66037954b7e8ea01f4f
+- name: github.com/cybozu-go/usocksd
+  version: 8a7cd4718ef8ec2d8220c06bd409d83535b6ce2f
+  subpackages:
+  - socks
 - name: github.com/docker/distribution
   version: 4e17ab5d319ac5b70b2769442947567a83386fbc
   subpackages:
@@ -38,8 +48,6 @@ imports:
   - tlsconfig
 - name: github.com/docker/go-units
   version: f2d77a61e3c169b43402a0a1e84f06daf29b8190
-- name: github.com/elazarl/goproxy
-  version: aacba83f36a55ac31cbb71c06547a328c0cd1604
 - name: github.com/gorilla/mux
   version: 392c28fe23e1c45ddba891b0320b3b5df220beea
 - name: github.com/inconshreveable/go-vhost
@@ -54,6 +62,8 @@ imports:
   version: 7221e387826c9918fa9fd6e7975baf4d30c8fa54
   subpackages:
   - libcontainer/user
+- name: github.com/pkg/errors
+  version: c605e284fe17294bda444b34710735b29d1a9d90
 - name: github.com/Sirupsen/logrus
   version: 55eb11d21d2a31a3cc93838241d04800f52e823d
   subpackages:
@@ -64,6 +74,7 @@ imports:
   version: 4876518f9e71663000c348837735820161a42df7
   subpackages:
   - context
+  - netutil
   - proxy
 - name: golang.org/x/sys
   version: 62bee037599929a6e9146f29d10dd5208c43507d

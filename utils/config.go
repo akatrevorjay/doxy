@@ -58,6 +58,7 @@ type Config struct {
 	DockerTlsKey    string
 	HttpAddr        string
 	HttpsAddr       string
+	SocksAddr       string
 	TlsGenRsaBits   int
 	TlsCaKey        string
 	TlsCert         string
@@ -104,6 +105,7 @@ func NewConfig() *Config {
 		DockerHost:      dockerHost,
 		HttpAddr:        ":8080",
 		HttpsAddr:       ":8443",
+		SocksAddr:		 ":1080",
 		CreateAlias:     true,
 		DockerTlsVerify: dockerTlsVerify,
 		DockerTlsCaCert: dockerCerts + "/ca.pem",

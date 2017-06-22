@@ -19,8 +19,8 @@ import (
 	"github.com/miekg/dns"
 )
 
-// DNSServer represents a DNS server
-type DNSServer struct {
+// DnsServer represents a DNS server
+type DnsServer struct {
 	config    *utils.Config
 	serverUdp *dns.Server
 	serverTcp *dns.Server
@@ -30,9 +30,9 @@ type DNSServer struct {
 	list      *servers.ServiceListProvider
 }
 
-// NewDNSServer create a new DNSServer
-func NewDNSServer(c *utils.Config, list servers.ServiceListProvider) (*DNSServer, error) {
-	s := &DNSServer{
+// NewDnsServer create a new DnsServer
+func NewDnsServer(c *utils.Config, list servers.ServiceListProvider) (*DnsServer, error) {
+	s := &DnsServer{
 		config: c,
 		lock:   &sync.RWMutex{},
 		client: &dns.Client{
@@ -58,7 +58,7 @@ func NewDNSServer(c *utils.Config, list servers.ServiceListProvider) (*DNSServer
 	return s, nil
 }
 
-func (s *DNSServer) clientLoadResolvconf() {
+func (s *DnsServer) clientLoadResolvconf() {
 	var resolvconf string = "/etc/resolv.conf"
 
 	cc, err := dns.ClientConfigFromFile(resolvconf)
@@ -71,9 +71,9 @@ func (s *DNSServer) clientLoadResolvconf() {
 	}
 }
 
-// Start starts the DNSServer
-func (s *DNSServer) Start() error {
-	logger.Infof("Starting DNS service; domain=%s listening on %s/tcp+udp", s.config.Domain.String(), s.config.DnsAddr)
+// Start starts the DnsServer
+func (s *DnsServer) Start() error {
+	logger.Infof("Starting DnsServer; domain=%s listening on %s/tcp+udp", s.config.Domain.String(), s.config.DnsAddr)
 
 	go func() {
 		err := s.serverUdp.ListenAndServe()
@@ -92,14 +92,14 @@ func (s *DNSServer) Start() error {
 	return nil
 }
 
-// Stop stops the DNSServer
-func (s *DNSServer) Stop() {
+// Stop stops the DnsServer
+func (s *DnsServer) Stop() {
 	s.serverUdp.Shutdown()
 	s.serverTcp.Shutdown()
 }
 
 // AddService adds a new container and thus new DNS records
-func (s *DNSServer) AddService(id string, service *servers.Service) error {
+func (s *DnsServer) AddService(id string, service *servers.Service) error {
 	if len(service.IPs) == 0 {
 		logger.Warningf("Service %s ignored: No IP provided.", service.Name)
 		return nil
@@ -124,7 +124,7 @@ func (s *DNSServer) AddService(id string, service *servers.Service) error {
 }
 
 // RemoveService removes a new container and thus DNS records
-func (s *DNSServer) RemoveService(id string) error {
+func (s *DnsServer) RemoveService(id string) error {
 	service, err := (*s.list).GetService(id)
 	if err != nil {
 		logger.Errorf("Cannot remove a service that doesn't already exist. id=%s", id)
@@ -154,7 +154,7 @@ func (s *DNSServer) RemoveService(id string) error {
 	return nil
 }
 
-func (s *DNSServer) handleForward(w dns.ResponseWriter, r *dns.Msg) {
+func (s *DnsServer) handleForward(w dns.ResponseWriter, r *dns.Msg) {
 	for _, nameserver := range s.config.Nameservers {
 		logger.Debugf("Forwarding DNS query for domain=%s to nameserver=%s", r.Question[0].Name, nameserver)
 
@@ -175,11 +175,11 @@ func (s *DNSServer) handleForward(w dns.ResponseWriter, r *dns.Msg) {
 	s.handleFailed(w, r)
 }
 
-func (s *DNSServer) handleFailed(w dns.ResponseWriter, r *dns.Msg) {
+func (s *DnsServer) handleFailed(w dns.ResponseWriter, r *dns.Msg) {
 	dns.HandleFailed(w, r)
 }
 
-func (s *DNSServer) makeServiceA(n string, service *servers.Service) dns.RR {
+func (s *DnsServer) makeServiceA(n string, service *servers.Service) dns.RR {
 	var ttl int
 	if service.TTL != -1 {
 		ttl = service.TTL
@@ -208,7 +208,7 @@ func (s *DNSServer) makeServiceA(n string, service *servers.Service) dns.RR {
 	return rr
 }
 
-func (s *DNSServer) makeServiceMX(n string, service *servers.Service) dns.RR {
+func (s *DnsServer) makeServiceMX(n string, service *servers.Service) dns.RR {
 	rr := new(dns.MX)
 
 	var ttl int
@@ -230,7 +230,7 @@ func (s *DNSServer) makeServiceMX(n string, service *servers.Service) dns.RR {
 	return rr
 }
 
-func (s *DNSServer) makeServiceCNAME(n string, service *servers.Service) dns.RR {
+func (s *DnsServer) makeServiceCNAME(n string, service *servers.Service) dns.RR {
 	rr := new(dns.CNAME)
 
 	var ttl int
@@ -252,7 +252,7 @@ func (s *DNSServer) makeServiceCNAME(n string, service *servers.Service) dns.RR 
 	return rr
 }
 
-func (s *DNSServer) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
+func (s *DnsServer) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 	m := new(dns.Msg)
 	m.SetReply(r)
 	m.RecursionAvailable = true
@@ -327,7 +327,7 @@ func (s *DNSServer) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 	w.WriteMsg(m)
 }
 
-func (s *DNSServer) handleNxdomain(w dns.ResponseWriter, r *dns.Msg) {
+func (s *DnsServer) handleNxdomain(w dns.ResponseWriter, r *dns.Msg) {
 	m := new(dns.Msg)
 	m.SetReply(r)
 	m.RecursionAvailable = true
@@ -338,7 +338,7 @@ func (s *DNSServer) handleNxdomain(w dns.ResponseWriter, r *dns.Msg) {
 	w.WriteMsg(m)
 }
 
-func (s *DNSServer) handleReverseRequest(w dns.ResponseWriter, r *dns.Msg) {
+func (s *DnsServer) handleReverseRequest(w dns.ResponseWriter, r *dns.Msg) {
 	m := new(dns.Msg)
 	m.SetReply(r)
 	m.RecursionAvailable = true
@@ -396,7 +396,7 @@ func (s *DNSServer) handleReverseRequest(w dns.ResponseWriter, r *dns.Msg) {
 	s.handleForward(w, r)
 }
 
-func (s *DNSServer) QueryIP(query string) chan *servers.Service {
+func (s *DnsServer) QueryIP(query string) chan *servers.Service {
 	reversedIP := strings.TrimSuffix(query, ".in-addr.arpa")
 	ipstr := strings.Join(utils.Reverse(dns.SplitDomainName(reversedIP)), ".")
 
@@ -408,7 +408,7 @@ func (s *DNSServer) QueryIP(query string) chan *servers.Service {
 // TTL is used from config so that not-found result responses are not cached
 // for a long time. The other defaults left as is(skydns source) because they
 // do not have an use case in this situation.
-func (s *DNSServer) createSOA() []dns.RR {
+func (s *DnsServer) createSOA() []dns.RR {
 	dom := s.config.Domain.String()
 	name := s.config.Name
 	soa := &dns.SOA{
