@@ -286,6 +286,13 @@ func (c *onCloseConn) Close() error {
 	return c.Conn.Close()
 }
 
+func absolutelyNothingHandler(upstream http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		//io.Copy(w, r.Body)
+		upstream.ServeHTTP(w, r)
+	})
+}
+
 func (s *HTTPProxy) httpDirector(r *http.Request) {
 	r.URL.Host = r.Host
 	r.URL.Scheme = "http"

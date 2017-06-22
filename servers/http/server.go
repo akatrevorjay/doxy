@@ -18,6 +18,7 @@ import (
 	"github.com/akatrevorjay/doxy/utils"
 	"github.com/akatrevorjay/doxy/utils/ca"
 
+	"github.com/gorilla/mux"
 	"github.com/inconshreveable/go-vhost"
 )
 
@@ -25,10 +26,7 @@ import (
 type HTTPProxy struct {
 	config *utils.Config
 	list   *servers.ServiceListProvider
-
-	muxTls  *vhost.TLSMuxer
-	muxHttp *vhost.HTTPMuxer
-
+	mux    *mux.Router
 	proxy *Proxy
 }
 
@@ -83,36 +81,52 @@ func NewHTTPProxy(c *utils.Config, list servers.ServiceListProvider) (*HTTPProxy
 		httpsDirector: s.httpsDirector,
 	}
 
-	return s, nil
-}
+	mux := mux.NewRouter()
+	s.mux = mux
 
-func absolutelyNothingHandler(upstream http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		//io.Copy(w, r.Body)
-		upstream.ServeHTTP(w, r)
-	})
+	doxy_host := utils.DomainJoin(s.config.Name, s.config.Domain.String())
+
+	doxymux := s.mux.Host(doxy_host).Subrouter()
+	doxymux.HandleFunc("/pac.js", s.handlePAC)
+
+	s.mux.HandleFunc("/_doxy/pac.js", s.handlePAC)
+
+	//s.mux.Handle("/_doxy/", s.handleDoxy)
+
+	// Pass the rest to proxy
+	s.mux.Handle("/", s.proxy)
+
+	return s, nil
 }
 
 // Start starts the http endpoints
 func (s *HTTPProxy) Start() error {
 	logger.Infof("Starting HTTPProxy; listening on http=%s https=%s.", s.config.HttpAddr, s.config.HttpsAddr)
 
+	// HTTP
 	lnHttp, err := net.Listen("tcp", s.config.HttpAddr)
 	if err != nil {
 		logger.Fatalf("Error listening for http connections: %v", err)
 	}
+
+	// HTTP serve
+	go func() {
+		var err error
+
+		//err = http.Serve(lnHttp, s.proxy)
+		err = http.Serve(lnHttp, s.mux)
+		orPanic(err)
+	}()
+
+	// TLS
 	lnTls, err := net.Listen("tcp", s.config.HttpsAddr)
 	if err != nil {
 		logger.Fatalf("Error listening for https connections: %v", err)
 	}
 
-	go func() {
-		var err error
-
-		err = http.Serve(lnHttp, s.proxy)
-		orPanic(err)
-	}()
-
+	// TLS serve
+	// This is different from the proxy handler as it generates certificates on the fly providing TLS
+	// for all services automatically.
 	go func() {
 		for {
 			conn, err := lnTls.Accept()
@@ -168,7 +182,8 @@ func (s *HTTPProxy) Start() error {
 				// requests and sending them through our handler as long as the connection
 				// stays open.
 				go func() {
-					err = http.Serve(listener, s.proxy)
+					//err = http.Serve(listener, s.proxy)
+					err = http.Serve(listener, s.mux)
 					if err != nil && err != io.EOF {
 						logger.Errorf("Error serving mitm'ed connection: %v", err)
 					}

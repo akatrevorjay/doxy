@@ -24,6 +24,7 @@ import (
 	"github.com/akatrevorjay/doxy/servers/dns"
 	"github.com/akatrevorjay/doxy/servers/http"
 	//"github.com/akatrevorjay/doxy/servers/socks"
+	//"github.com/akatrevorjay/doxy/servers/transocks"
 )
 
 // GitSummary contains the version number
