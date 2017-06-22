@@ -23,7 +23,7 @@ import (
 	"github.com/akatrevorjay/doxy/servers"
 	"github.com/akatrevorjay/doxy/servers/dns"
 	"github.com/akatrevorjay/doxy/servers/http"
-	//"github.com/akatrevorjay/doxy/servers/socks"
+	"github.com/akatrevorjay/doxy/servers/socks"
 	//"github.com/akatrevorjay/doxy/servers/transocks"
 )
 
@@ -86,9 +86,9 @@ func main() {
 	orPanic(err)
 	list.RegisterHandler("http", httpProxyServer)
 
-	//socksProxyServer, err := socks.NewSocksProxy(config, list)
-	//orPanic(err)
-	//list.RegisterHandler("socks", socksProxyServer)
+	socksProxyServer, err := socks.NewSocksProxy(config, list)
+	orPanic(err)
+	list.RegisterHandler("socks", socksProxyServer)
 
 	docker, err := core.NewDockerManager(config, list, tlsConfig)
 	orPanic(err)
@@ -99,8 +99,8 @@ func main() {
 	err = httpProxyServer.Start()
 	orPanic(err)
 
-	//err = socksProxyServer.Start()
-	//orPanic(err)
+	err = socksProxyServer.Start()
+	orPanic(err)
 
 	err = docker.Start()
 	orPanic(err)

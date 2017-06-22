@@ -52,7 +52,6 @@ func (d adaptedDialer) Dial(r *socks.Request) (net.Conn, error) {
 
 func (s *SocksProxy) adaptDestinationRequest(r *socks.Request) {
 	var host string = r.Hostname
-	var port int = r.Port
 
 	// Use IP if we didn't get a name for some reason
 	if host == "" {

@@ -16,12 +16,12 @@ proxy["{{ $proto }}"] = "{{ $addr }}";
 function FindProxyForURL(url, host)
 {
 	if ( shExpMatch(host, "({{ range $domain := .Domains }}*.{{ $domain }}|{{ $domain }}|{{ end }}doxy)") ) {
-		if ( url.substring(0, 5) == "http:" ) {
+		if ( "socks" in proxy ) {
+			return "SOCKS5 " + proxy["socks"];
+		} else if ( url.substring(0, 5) == "http:" ) {
 			//return "PROXY " + proxy["http"] + "; DIRECT";
 			return "PROXY " + proxy["http"];
-		}
-
-		if ( url.substring(0, 6) == "https:" ) {
+		} else if ( url.substring(0, 6) == "https:" ) {
 			return "PROXY " + proxy["https"];
 		}
 	}
@@ -51,7 +51,8 @@ func (s *HTTPProxy) generatePAC(buf io.Writer) error {
 	// SOCKS5(h) must be used in the case of dns not going to doxy.
 	ctx.Proxies["socks"] = s.config.SocksAddr
 
-	ctx.Domains = append(ctx.Domains, "doxy.docker")
+	//ctx.Domains = append(ctx.Domains, "doxy.docker")
+	ctx.Domains = append(ctx.Domains, "docker")
 
 	err = tmpl.Execute(buf, ctx)
 	return err
