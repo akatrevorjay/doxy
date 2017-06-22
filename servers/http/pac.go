@@ -48,6 +48,9 @@ func (s *HTTPProxy) generatePAC(buf io.Writer) error {
 	ctx.Proxies["http"] = s.config.HttpAddr
 	ctx.Proxies["https"] = s.config.HttpsAddr
 
+	// SOCKS5(h) must be used in the case of dns not going to doxy.
+	ctx.Proxies["socks"] = s.config.SocksAddr
+
 	ctx.Domains = append(ctx.Domains, "doxy.docker")
 
 	err = tmpl.Execute(buf, ctx)
@@ -55,5 +58,6 @@ func (s *HTTPProxy) generatePAC(buf io.Writer) error {
 }
 
 func (s *HTTPProxy) handlePAC(w http.ResponseWriter, r *http.Request) {
+	logger.Debugf("Generating PAC file")
 	s.generatePAC(w)
 }

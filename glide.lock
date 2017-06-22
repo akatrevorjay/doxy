@@ -1,5 +1,5 @@
 hash: 26543e920ff67d61c3ec0faa557dd1139af65798944536ab8e10f75cb6e17515
-updated: 2017-06-21T19:30:45.730724808-07:00
+updated: 2017-06-22T08:48:36.243129411-07:00
 imports:
 - name: github.com/alecthomas/template
   version: a0175ee3bccc567396460bf5acd36800cb10c49c
@@ -48,6 +48,8 @@ imports:
   - tlsconfig
 - name: github.com/docker/go-units
   version: f2d77a61e3c169b43402a0a1e84f06daf29b8190
+- name: github.com/gorilla/context
+  version: aed02d124ae4a0e94fea4541c8effd05bf0c8296
 - name: github.com/gorilla/mux
   version: 392c28fe23e1c45ddba891b0320b3b5df220beea
 - name: github.com/inconshreveable/go-vhost

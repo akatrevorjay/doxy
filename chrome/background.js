@@ -18,19 +18,19 @@ document.addEventListener("DOMContentLoaded", function () {
   var persistedSettings = ProxyFormController.getPersistedSettings();
 
   if (persistedSettings !== null) {
-      //chrome.proxy.settings.set(
-      //  {'value': persistedSettings.regular}
-      //);
-
       if (persistedSettings.regular.mode == 'pac_script') {
-          // Do something every 5 seconds
-          setInterval(function() {
-            // call URL with random string to avoid URL cache
-            persistedSettings.regular.pacScript.url = 'myfile/path/for/fun.pac?nocache'+Math.floor((Math.random() * 1000) + 1);
-            chrome.proxy.settings.set({'value': persistedSettings.regular});
+        // Refresh every 5 seconds
+        setInterval(function() {
+          // call URL with random string to avoid URL cache
+          // TODO Don't hardcode this.
+          persistedSettings.regular.pacScript.url = 'http://127.0.0.69/_doxy/pac.js?nocache'+Math.floor((Math.random() * 1000) + 1);
+          chrome.proxy.settings.set({'value': persistedSettings.regular});
         }, 5000);
       }
-      chrome.proxy.settings.set({'value': persistedSettings.regular});
+
+      chrome.proxy.settings.set(
+        {'value': persistedSettings.regular}
+      );
   }
 });
 
