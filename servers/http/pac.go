@@ -45,6 +45,7 @@ func (s *HTTPProxy) generatePAC(buf io.Writer) error {
 		Proxies: make(map[string]string, 0),
 	}
 
+	// TODO This shouldn't be static like this.
 	ctx.Proxies["http"] = s.config.HttpAddr
 	ctx.Proxies["https"] = s.config.HttpsAddr
 
