@@ -1,0 +1,19 @@
+#!/bin/zsh
+set -eo pipefail
+set -xv
+
+#docker-compose -f test-nginx.yml up -d
+
+dest=http://doxy.docker/status
+
+doxy=127.0.0.69
+
+dest_host=${${dest#*://}%%/*}
+dest_proto=${dest%%://*}
+
+curl -kvv \
+    --connect-to $dest_host:443:$doxy:443 \
+    --connect-to $dest_host:80:$doxy:80 \
+    $dest \
+    "$@"
+

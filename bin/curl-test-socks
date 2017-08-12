@@ -1,0 +1,17 @@
+#!/bin/zsh
+set -eo pipefail
+set -xv
+
+#docker-compose -f test-nginx.yml up -d
+
+dest=${1:-https://doxy_nginx.docker}
+
+doxy=127.0.0.69
+
+dest_host=${${dest#*://}%%/*}
+dest_proto=${dest%%://*}
+
+curl -kvv \
+    --proxy socks5h://$doxy:1080 \
+    $dest \
+    "$@"

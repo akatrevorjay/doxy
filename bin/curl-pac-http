@@ -1,0 +1,2 @@
+#!/bin/zsh
+exec ./curl-test http://doxy.docker/_doxy/pac.js
