@@ -27,7 +27,7 @@ type HTTPProxy struct {
 	config *utils.Config
 	list   *servers.ServiceListProvider
 	mux    *mux.Router
-	proxy *Proxy
+	proxy  *Proxy
 }
 
 func (s *HTTPProxy) tlsSetup() tls.Certificate {
@@ -58,27 +58,7 @@ func NewHTTPProxy(c *utils.Config, list servers.ServiceListProvider) (*HTTPProxy
 	s.proxy = &Proxy{
 		CA: &ca,
 		TLSServerConfig: &tls.Config{
-			MinVersion: tls.VersionTLS12,
-			CipherSuites: []uint16{
-			//    tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
-				//tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
-			//    tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-			//    tls.TLS_ECDHE_RSA_WITH_RC4_128_SHA,
-			//    tls.TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA,
-				//tls.TLS_RSA_WITH_RC4_128_SHA,
-			//    tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA,
-			//    tls.TLS_RSA_WITH_AES_128_CBC_SHA,
-			//    tls.TLS_RSA_WITH_AES_256_CBC_SHA,
-			//    tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
-			//    tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
-			//    tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
-			//    tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
-			//    tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-			//    tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-			//    tls.TLS_ECDHE_ECDSA_WITH_RC4_128_SHA,
-			//    tls.TLS_FALLBACK_SCSV,
-			},
-			//PreferServerCipherSuites: true,
+			PreferServerCipherSuites: true,
 		},
 		Wrap: absolutelyNothingHandler,
 		//Timeout: 5 * time.Second,
@@ -93,12 +73,13 @@ func NewHTTPProxy(c *utils.Config, list servers.ServiceListProvider) (*HTTPProxy
 
 	doxy_host := utils.DomainJoin(s.config.Name, s.config.Domain.String())
 
+	// doxy.docker
 	doxymux := s.mux.Host(doxy_host).Subrouter()
 	doxymux.HandleFunc("/pac.js", s.handlePAC)
 
-	s.mux.HandleFunc("/_doxy/pac.js", s.handlePAC)
-
+	// */_doxy/
 	//s.mux.Handle("/_doxy/", s.handleDoxy)
+	s.mux.HandleFunc("/_doxy/pac.js", s.handlePAC)
 
 	// Pass the rest to proxy
 	s.mux.Handle("/", s.proxy)

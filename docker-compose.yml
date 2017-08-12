@@ -1,11 +1,11 @@
-version: '3'
+version: '3.3'
 
 services:
   doxy:
     build: .
     hostname: doxy
     container_name: doxy
-    command: doxy -D :53 -H :80 -I :443
+    command: doxy -D :53 -H :80 -I :443 -S :1080
     restart: always
 
     volumes:
@@ -16,7 +16,11 @@ services:
     network_mode: host
 
     expose:
+      # dns
       - 53/udp
       - 53/tcp
+      # http
       - 80/tcp
       - 443/tcp
+      # socks5h
+      - 1080/tcp

@@ -1,9 +1,9 @@
 package http
 
 import (
-	"text/template"
 	"io"
 	"net/http"
+	"text/template"
 )
 
 const TEMPLATE string = `
