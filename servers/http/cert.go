@@ -8,10 +8,12 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
 	"time"
+	"github.com/coocood/freecache"
 )
 
 const (
@@ -25,7 +27,41 @@ const (
 		x509.KeyUsageCertSign |
 		x509.KeyUsageCRLSign
 	leafUsage = caUsage
+	signatureAlgorithm = x509.ECDSAWithSHA512
 )
+
+// 10 mB
+var cache = freecache.NewCache(10 * 1024 * 1024)
+
+func getOrGenCert(ca *tls.Certificate, names []string) (*tls.Certificate, error) {
+	key, err := json.Marshal(names)
+	if (err != nil) {
+		return nil, err
+	}
+
+	var cert *tls.Certificate
+	var val []byte
+
+	val, found := cache.Get(key)
+	if (found == nil) {
+		err = json.Unmarshal(val, &cert)
+		return cert, err
+	}
+
+	cert, err = genCert(ca, names)
+	if (err != nil) {
+		return nil, err
+	}
+
+	// leafMaxAge - 120s so we regen without issue here
+	val, err = json.Marshal(cert)
+	if (err != nil) {
+		return nil, err
+	}
+	cache.Set(key, val, int(leafMaxAge.Seconds()) - 120)
+
+	return cert, nil
+}
 
 func genCert(ca *tls.Certificate, names []string) (*tls.Certificate, error) {
 	now := time.Now().Add(-1 * time.Hour).UTC()
@@ -37,15 +73,17 @@ func genCert(ca *tls.Certificate, names []string) (*tls.Certificate, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate serial number: %s", err)
 	}
+	expires := now.Add(leafMaxAge)
+
 	tmpl := &x509.Certificate{
 		SerialNumber:          serialNumber,
 		Subject:               pkix.Name{CommonName: names[0]},
 		NotBefore:             now,
-		NotAfter:              now.Add(leafMaxAge),
+		NotAfter:              expires,
 		KeyUsage:              leafUsage,
 		BasicConstraintsValid: true,
-		DNSNames:              names,
-		//SignatureAlgorithm:    x509.ECDSAWithSHA512,
+		DNSNames:              names[1:],
+		// SignatureAlgorithm:    signatureAlgorithm,
 	}
 	key, err := genKeyPair()
 	if err != nil {
@@ -69,15 +107,15 @@ func genKeyPair() (*ecdsa.PrivateKey, error) {
 func GenCA(name string) (certPEM, keyPEM []byte, err error) {
 	now := time.Now().UTC()
 	tmpl := &x509.Certificate{
-		SerialNumber:          big.NewInt(1),
-		Subject:               pkix.Name{CommonName: name},
-		NotBefore:             now,
-		NotAfter:              now.Add(caMaxAge),
-		KeyUsage:              caUsage,
-		BasicConstraintsValid: true,
-		IsCA:               true,
-		MaxPathLen:         2,
-		SignatureAlgorithm: x509.ECDSAWithSHA512,
+		SerialNumber:           big.NewInt(1),
+		Subject:                pkix.Name{CommonName: name},
+		NotBefore:              now,
+		NotAfter:               now.Add(caMaxAge),
+		KeyUsage:               caUsage,
+		BasicConstraintsValid:	true,
+		IsCA:					true,
+		MaxPathLen:				2,
+		SignatureAlgorithm:     signatureAlgorithm,
 	}
 	key, err := genKeyPair()
 	if err != nil {
