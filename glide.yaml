@@ -13,3 +13,4 @@ import:
   subpackages:
   - context
 - package: gopkg.in/alecthomas/kingpin.v2
+- package: github.com/coocood/freecache
