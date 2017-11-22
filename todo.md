@@ -1,39 +1,20 @@
-DNS
----
+## Socks
 
-### wildcard everything
+- Windows sucks to support, and I honestly couldn't care less about such a thing to be honest.
 
-  Upon query of `test.web.project.dock` results in _NXERROR_,
-traverse the tree along the domain quad order, providing each service with unlimited named wildcards:
-- `test.web.project.dock`; nxerror, strip first quad and retry.
-- `web.project.dock`: found; return cname towards.
+Either way, a way that happens to work and provide decent features here for everyone, is to provide a socks server with automagic generation of `PAC` associated with exported hostnames. Browsers only refresh a PAC file every so often, but I found that via a simple extension you can do this as often as you like.
 
-### easy
+- Important: Doxy needs an icon.
+- Socks server is implemented.
+- Automagic PAC generation is implemented.
+- Chrome extension is currently just a hack from the chrome examples and needs any bit of love at all.
+- Firefox?
 
-- $id.dock
-- $shortid.dock
-- $name.dock
-
-### handle compose-like names
-
-- split `$name` by `_`
-- join by `.` in reverse order, add IP to all in chain
-- ex: `project_web_1`:
-  - `1.web.project.dock`
-  - `web.project.dock` all `project_web_*` returned
-  #- `project.dock`: all `project_*` returned
-
-### use labels to configure
-
-- aliases
-
-Web
----
+## Web
 
 - dns: `.webdock` tld is the same as above but resolves to self
 - http: proxy to Host header
 - https: provide free https downgrade to http
-- https: automagic ca: gen cert per Host on the fly
 
 ### use labels to configure
 
