@@ -8,3 +8,9 @@ Doxy provides a DNS server as well as an HTTP/S reverse proxy for your container
 
 * Understands `docker-compose` labels and assigns pleasant aliases, because `project_service_idx` is really rather long.
 
+
+Kudos
+-----
+
+This originally started as a fork of [dnsdock](https://github.com/aacebedo/dnsdock), but has since grown into something
+completely different in terms of goals and features.
