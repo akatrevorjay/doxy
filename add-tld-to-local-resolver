@@ -41,12 +41,12 @@ declare -n stack="$os"
 ns="${1:-127.0.0.69}"
 tld="${2:-docker}"
 
-function ensure-dnsdock {
+function ensure-doxy {
 	dc build
 	dc kill && dc rm -fv || :
 	dc up -d
 }
-stack+=(ensure-dnsdock)
+stack+=(ensure-doxy)
 
 function osx-ensure-resolv {
 	e "Setting tld=%s to use nameserver=%s" "$tld" "$ns"
@@ -62,7 +62,7 @@ function osx-ensure-resolv {
 osx+=(osx-ensure-resolv)
 
 function linux-ensure-resolv {
-	local fn="dnsdock-$tld"
+	local fn="doxy-$tld"
 	local dnsmasq_avail="/etc/dnsmasq.d-available/$fn"
 	local dnsmasq_d="/etc/dnsmasq.d/$fn"
 

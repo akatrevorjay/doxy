@@ -91,15 +91,15 @@ func TestOverrideFromEnv(t *testing.T) {
 	}
 
 	s = getService()
-	s = overrideFromEnv(s, map[string]string{"DNSDOCK_IGNORE": "1"})
+	s = overrideFromEnv(s, map[string]string{"doxy_IGNORE": "1"})
 	if s != nil {
 		t.Error("Skipping failed(2)")
 	}
 
 	s = getService()
-	s = overrideFromEnv(s, map[string]string{"DNSDOCK_NAME": "master", "DNSDOCK_IMAGE": "mysql", "DNSDOCK_TTL": "22"})
+	s = overrideFromEnv(s, map[string]string{"doxy_NAME": "master", "doxy_IMAGE": "mysql", "doxy_TTL": "22"})
 	if s.Name != "master" || s.Image != "mysql" || s.TTL != 22 {
-		t.Error("Invalid DNSDOCK override", s)
+		t.Error("Invalid doxy override", s)
 	}
 
 	s = getService()
