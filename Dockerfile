@@ -1,7 +1,7 @@
-FROM golang:1.8
+FROM golang:1.10
 
 RUN apt-get update -qq \
- && apt-get install -qqy git \
+ && apt-get install -qqy git traceroute \
  && apt-get clean
 
 RUN go get -u -v github.com/golang/lint/golint \
