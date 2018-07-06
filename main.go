@@ -79,28 +79,40 @@ func main() {
 	orPanic(err)
 
 	dnsServer, err := dns.NewDnsServer(config, list)
-	orPanic(err)
-	list.RegisterHandler("dns", dnsServer)
+	if (config.DnsEnable) {
+		orPanic(err)
+		list.RegisterHandler("dns", dnsServer)
+	}
 
 	httpProxyServer, err := http.NewHTTPProxy(config, list)
-	orPanic(err)
-	list.RegisterHandler("http", httpProxyServer)
+	if (config.HttpEnable) {
+		orPanic(err)
+		list.RegisterHandler("http", httpProxyServer)
+	}
 
 	socksProxyServer, err := socks.NewSocksProxy(config, list)
-	orPanic(err)
-	list.RegisterHandler("socks", socksProxyServer)
+	if (config.SocksEnable) {
+		orPanic(err)
+		list.RegisterHandler("socks", socksProxyServer)
+	}
 
 	docker, err := core.NewDockerManager(config, list, tlsConfig)
 	orPanic(err)
 
-	err = dnsServer.Start()
-	orPanic(err)
+	if (config.DnsEnable) {
+		err = dnsServer.Start()
+		orPanic(err)
+	}
 
-	err = httpProxyServer.Start()
-	orPanic(err)
+	if (config.HttpEnable) {
+		err = httpProxyServer.Start()
+		orPanic(err)
+	}
 
-	err = socksProxyServer.Start()
-	orPanic(err)
+	if (config.SocksEnable) {
+		err = socksProxyServer.Start()
+		orPanic(err)
+	}
 
 	err = docker.Start()
 	orPanic(err)

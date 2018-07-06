@@ -28,6 +28,7 @@ type DnsServer struct {
 	lock      *sync.RWMutex
 	client    *dns.Client
 	list      *servers.ServiceListProvider
+	IsProxy	  bool
 }
 
 // NewDnsServer create a new DnsServer
@@ -40,14 +41,19 @@ func NewDnsServer(c *utils.Config, list servers.ServiceListProvider) (*DnsServer
 			SingleInflight: true,
 		},
 		list: &list,
+		IsProxy: c.ProxyDNS,
 	}
-
-	s.clientLoadResolvconf()
 
 	s.mux = dns.NewServeMux()
 
 	s.mux.HandleFunc(c.Domain.String()+".", s.handleRequest)
 	s.mux.HandleFunc("in-addr.arpa.", s.handleReverseRequest)
+
+	if (s.IsProxy) {
+		if (c.ProxyNameserversFromResolvconf) {
+			s.clientLoadResolvconf()
+		}
+	}
 
 	// Catchall
 	s.mux.HandleFunc(".", s.handleForward)
@@ -155,19 +161,21 @@ func (s *DnsServer) RemoveService(id string) error {
 }
 
 func (s *DnsServer) handleForward(w dns.ResponseWriter, r *dns.Msg) {
-	for _, nameserver := range s.config.Nameservers {
-		logger.Debugf("Forwarding DNS query for domain=%s to nameserver=%s", r.Question[0].Name, nameserver)
+	if (s.IsProxy) {
+		for _, nameserver := range s.config.Nameservers {
+			logger.Debugf("Forwarding DNS query for domain=%s to nameserver=%s", r.Question[0].Name, nameserver)
 
-		in, _, err := s.client.Exchange(r, nameserver)
-		if err == nil {
-			if s.config.ForceTtl {
-				logger.Debugf("Forcing Ttl value of the forwarded response")
-				for _, rr := range in.Answer {
-					rr.Header().Ttl = uint32(s.config.Ttl)
+			in, _, err := s.client.Exchange(r, nameserver)
+			if err == nil {
+				if s.config.ForceTtl {
+					logger.Debugf("Forcing Ttl value of the forwarded response")
+					for _, rr := range in.Answer {
+						rr.Header().Ttl = uint32(s.config.Ttl)
+					}
 				}
+				w.WriteMsg(in)
+				return
 			}
-			w.WriteMsg(in)
-			return
 		}
 	}
 
@@ -255,7 +263,9 @@ func (s *DnsServer) makeServiceCNAME(n string, service *servers.Service) dns.RR 
 func (s *DnsServer) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 	m := new(dns.Msg)
 	m.SetReply(r)
-	m.RecursionAvailable = true
+	if (s.IsProxy) {
+		m.RecursionAvailable = true
+	}
 
 	// Send empty response for empty requests
 	if len(r.Question) == 0 {
@@ -281,8 +291,16 @@ func (s *DnsServer) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 	// We didn't find a record corresponding to the query
 	if svc == nil {
 		logger.Debugf("DNS record *not* found for query %s from remote %v", r.Question[0].Name, w.RemoteAddr())
+
+		// m.Answer = make([]dns.RR, 0)
+
 		m.Ns = s.createSOA()
+
 		m.SetRcode(r, dns.RcodeNameError) // NXDOMAIN
+
+		// utils.Dump(r.Question)
+		utils.Dump(m)
+
 		w.WriteMsg(m)
 		return
 	}
@@ -308,6 +326,7 @@ func (s *DnsServer) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 		qtype_name := dns.TypeToString[r.Question[0].Qtype]
 
 		logger.Debugf("Query type not supported: %s (%v)", qtype_name, r.Question[0].Qtype)
+
 		utils.Dump(r.Question)
 
 		// this query type isn't supported, but we do have
@@ -330,7 +349,9 @@ func (s *DnsServer) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 func (s *DnsServer) handleNxdomain(w dns.ResponseWriter, r *dns.Msg) {
 	m := new(dns.Msg)
 	m.SetReply(r)
-	m.RecursionAvailable = true
+	if (s.IsProxy) {
+		m.RecursionAvailable = true
+	}
 
 	m.Ns = s.createSOA()
 	m.SetRcode(r, dns.RcodeNameError) // NXDOMAIN
@@ -341,7 +362,9 @@ func (s *DnsServer) handleNxdomain(w dns.ResponseWriter, r *dns.Msg) {
 func (s *DnsServer) handleReverseRequest(w dns.ResponseWriter, r *dns.Msg) {
 	m := new(dns.Msg)
 	m.SetReply(r)
-	m.RecursionAvailable = true
+	if (s.IsProxy) {
+		m.RecursionAvailable = true
+	}
 
 	// Send empty response for empty requests
 	if len(r.Question) == 0 {

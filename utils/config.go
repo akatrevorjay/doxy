@@ -48,23 +48,40 @@ func (n *nameservers) Set(value string) error {
 // Config contains configuration
 type Config struct {
 	Name            string
-	Nameservers     nameservers
+
+	DnsEnable		bool
 	DnsAddr         string
 	Domain          Domain
+
+	Nameservers     nameservers
+	ProxyDNS		bool
+	ProxyNameserversFromResolvconf bool
+
+	// docker
 	DockerHost      string
 	DockerTlsVerify bool
 	DockerTlsCaCert string
 	DockerTlsCert   string
 	DockerTlsKey    string
+
+	// http
+	HttpEnable		bool
 	HttpAddr        string
 	HttpsAddr       string
+
+	// socks
+	SocksEnable		bool
 	SocksAddr       string
+
+	// tls
 	TlsGenRsaBits   int
 	TlsCaKey        string
 	TlsCert         string
+	// misc
 	Ttl             int
 	ForceTtl        bool
 	CreateAlias     bool
+	// logging
 	Verbose         bool
 	Quiet           bool
 	All             bool
@@ -100,6 +117,14 @@ func NewConfig() *Config {
 	return &Config{
 		Name:            "doxy",
 		Nameservers:     nameservers{},
+
+		SocksEnable:	 false,
+		HttpEnable:		 true,
+		DnsEnable:		 true,
+
+		ProxyDNS:		 false,
+		ProxyNameserversFromResolvconf: true,
+
 		DnsAddr:         ":8053",
 		Domain:          NewDomain("docker"),
 		DockerHost:      dockerHost,
@@ -120,5 +145,5 @@ func NewConfig() *Config {
 		ForceTtl:        false,
 		Ttl:             0,
 	}
-
 }
+
