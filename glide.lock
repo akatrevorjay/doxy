@@ -1,5 +1,5 @@
 hash: 1838eac5ce4bcf03113e4ab444927f09c04d4c3714a3186194da7a2ad3bb1c6c
-updated: 2017-11-01T05:42:21.531489028-07:00
+updated: 2018-07-06T14:44:04.479746672-07:00
 imports:
 - name: github.com/alecthomas/template
   version: a0175ee3bccc567396460bf5acd36800cb10c49c
@@ -7,25 +7,27 @@ imports:
   - parse
 - name: github.com/alecthomas/units
   version: 2efee857e7cfd4f3d0138cc3cbb1b4966962b93a
+- name: github.com/cespare/xxhash
+  version: 48099fad606eafc26e3a569fad19ff510fff4df6
 - name: github.com/coocood/freecache
-  version: a47e26eb67ac2657e4b5a62b1975bb2b65e0b8b3
+  version: 036298587d3a11a2946fecb24ef983708e2e8944
 - name: github.com/cybozu-go/cmd
-  version: 8d1ed337c3fbd89755769e1c2384fb66b76e4961
+  version: c89107690481ecbf6b74154606dea31d00124305
 - name: github.com/cybozu-go/log
-  version: 255a1a56ed921cf489010e04766b30070a9bb59b
+  version: 701af5f2aa4fd7041cc4c1bfbc6dea8648482968
 - name: github.com/cybozu-go/netutil
-  version: 2fcba33d781f20505e4cb66037954b7e8ea01f4f
+  version: 655796d993ec1174fb5779c4feadcaa2bd14427f
 - name: github.com/cybozu-go/usocksd
-  version: 8a7cd4718ef8ec2d8220c06bd409d83535b6ce2f
+  version: c6db20e4b8b2c90f6128cec721a169117fe1d669
   subpackages:
   - socks
 - name: github.com/docker/distribution
-  version: 4e17ab5d319ac5b70b2769442947567a83386fbc
+  version: 83389a148052d74ac602f5f1d62f86ff2f3c4aa5
   subpackages:
-  - digest
+  - digestset
   - reference
 - name: github.com/docker/engine-api
-  version: 3d1601b9d2436a70b0dfc045a23f6503d19195df
+  version: 4290f40c056686fcaa5c9caf02eac1dde9315adf
   subpackages:
   - client
   - client/transport
@@ -35,6 +37,7 @@ imports:
   - types/container
   - types/events
   - types/filters
+  - types/mount
   - types/network
   - types/reference
   - types/registry
@@ -43,49 +46,49 @@ imports:
   - types/time
   - types/versions
 - name: github.com/docker/go-connections
-  version: 990a1a1a70b0da4c4cb70e117971a4f0babfbf1a
+  version: 7395e3f8aa162843a74ed6d48e79627d9792ac55
   subpackages:
   - nat
   - sockets
   - tlsconfig
 - name: github.com/docker/go-units
-  version: f2d77a61e3c169b43402a0a1e84f06daf29b8190
+  version: 47565b4f722fb6ceae66b95f853feed578a4a51c
 - name: github.com/gorilla/context
-  version: aed02d124ae4a0e94fea4541c8effd05bf0c8296
+  version: 08b5f424b9271eedf6f9f0ce86cb9396ed337a42
 - name: github.com/gorilla/mux
-  version: 392c28fe23e1c45ddba891b0320b3b5df220beea
+  version: ded0c29b24f96f46cf349e6701b099db601cf8ec
 - name: github.com/inconshreveable/go-vhost
   version: 06d84117953b22058c096b49a429ebd4f3d3d97b
 - name: github.com/Microsoft/go-winio
-  version: ce2922f643c8fd76b46cadc7f404a06282678b34
+  version: 7da180ee92d8bd8bb8c37fc560e673e6557c392f
 - name: github.com/miekg/dns
-  version: 5d001d020961ae1c184f9f8152fdc73810481677
+  version: 83c435cc65d2862736428b9b4d07d0ab10ad3e4d
 - name: github.com/op/go-logging
-  version: b2cb9fa56473e98db8caba80237377e83fe44db5
-- name: github.com/opencontainers/runc
-  version: 7221e387826c9918fa9fd6e7975baf4d30c8fa54
-  subpackages:
-  - libcontainer/user
+  version: 970db520ece77730c7e4724c61121037378659d9
+- name: github.com/opencontainers/go-digest
+  version: 279bed98673dd5bef374d3b6e4b09e2af76183bf
 - name: github.com/pkg/errors
-  version: c605e284fe17294bda444b34710735b29d1a9d90
-- name: github.com/Sirupsen/logrus
-  version: 55eb11d21d2a31a3cc93838241d04800f52e823d
-  subpackages:
-  - formatters/logstash
-- name: github.com/spaolacci/murmur3
-  version: 9f5d223c60793748f04a9d5b4b4eacddfc1f755d
+  version: 816c9085562cd7ee03e7f8188a1cfd942858cded
 - name: github.com/vdemeester/docker-events
-  version: be74d4929ec1ad118df54349fda4b0cba60f849b
+  version: 4a83cc6dc9d599f999b62fe16bddd882ea731008
+- name: golang.org/x/crypto
+  version: 2b6c08872f4b66da917bb4ce98df4f0307330f78
+  subpackages:
+  - ed25519
+  - ed25519/internal/edwards25519
 - name: golang.org/x/net
-  version: da118f7b8e5954f39d0d2130ab35d4bf0e3cb344
+  version: b6d7b1396ec874c3b00f6c84cd4301a17c56c8ed
   subpackages:
   - context
+  - internal/iana
+  - ipv4
+  - ipv6
   - netutil
   - proxy
 - name: golang.org/x/sys
-  version: 62bee037599929a6e9146f29d10dd5208c43507d
+  version: 1d206c9fa8975fb4cf00df1dc8bf3283dc24ba0e
   subpackages:
   - windows
 - name: gopkg.in/alecthomas/kingpin.v2
-  version: 7f0871f2e17818990e4eed73f9b5c2f429501228
+  version: 947dcec5ba9c011838740e680966fd7087a71d0d
 testImports: []
