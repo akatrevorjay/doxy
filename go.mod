@@ -21,15 +21,13 @@ require (
 	github.com/gorilla/context v1.1.1 // indirect
 	github.com/gorilla/mux v0.0.0-20180501031136-ded0c29b24f9
 	github.com/inconshreveable/go-vhost v0.0.0-20160627193104-06d84117953b
-	github.com/miekg/dns v1.0.5
+	github.com/miekg/dns v1.1.25
 	github.com/op/go-logging v0.0.0-20160315200505-970db520ece7
 	github.com/opencontainers/go-digest v1.0.0-rc1 // indirect
 	github.com/pkg/errors v0.0.0-20180311214515-816c9085562c // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/stretchr/testify v1.4.0 // indirect
 	github.com/vdemeester/docker-events v0.0.0-20160930120339-4a83cc6dc9d5
-	golang.org/x/crypto v0.0.0-20180423110133-2b6c08872f4b // indirect
-	golang.org/x/net v0.0.0-20160217011348-b6d7b1396ec8
-	golang.org/x/sys v0.0.0-20180404203733-1d206c9fa897 // indirect
+	golang.org/x/net v0.0.0-20190923162816-aa69164e4478
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 )
