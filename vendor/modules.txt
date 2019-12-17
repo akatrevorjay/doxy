@@ -49,7 +49,7 @@ github.com/gorilla/context
 github.com/gorilla/mux
 # github.com/inconshreveable/go-vhost v0.0.0-20160627193104-06d84117953b
 github.com/inconshreveable/go-vhost
-# github.com/miekg/dns v1.0.5
+# github.com/miekg/dns v1.1.25
 github.com/miekg/dns
 # github.com/op/go-logging v0.0.0-20160315200505-970db520ece7
 github.com/op/go-logging
@@ -59,17 +59,21 @@ github.com/opencontainers/go-digest
 github.com/pkg/errors
 # github.com/vdemeester/docker-events v0.0.0-20160930120339-4a83cc6dc9d5
 github.com/vdemeester/docker-events
-# golang.org/x/crypto v0.0.0-20180423110133-2b6c08872f4b
+# golang.org/x/crypto v0.0.0-20190923035154-9ee001bba392
 golang.org/x/crypto/ed25519
 golang.org/x/crypto/ed25519/internal/edwards25519
-# golang.org/x/net v0.0.0-20160217011348-b6d7b1396ec8
+# golang.org/x/net v0.0.0-20190923162816-aa69164e4478
 golang.org/x/net/context
 golang.org/x/net/ipv4
 golang.org/x/net/ipv6
 golang.org/x/net/proxy
+golang.org/x/net/bpf
 golang.org/x/net/internal/iana
+golang.org/x/net/internal/socket
 golang.org/x/net/netutil
-# golang.org/x/sys v0.0.0-20180404203733-1d206c9fa897
+golang.org/x/net/internal/socks
+# golang.org/x/sys v0.0.0-20190924154521-2837fb4f24fe
+golang.org/x/sys/unix
 golang.org/x/sys/windows
 # gopkg.in/alecthomas/kingpin.v2 v2.2.6
 gopkg.in/alecthomas/kingpin.v2
