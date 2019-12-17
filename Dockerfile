@@ -1,26 +1,22 @@
-FROM golang:1.10
+FROM golang:1.13
 
 RUN apt-get update -qq \
  && apt-get install -qqy git traceroute \
  && apt-get clean
 
-RUN go get -u -v github.com/golang/lint/golint \
- && go get -u -v github.com/Masterminds/glide \
- && go get -u -v github.com/akatrevorjay/rerun
+RUN go get -u -v github.com/akatrevorjay/rerun
 
-ENV GOPACKAGE=github.com/akatrevorjay/doxy \
-    APP_ROOT=/app
+ENV APP_ROOT=/app
 
-WORKDIR /go/src/$GOPACKAGE
+WORKDIR $APP_ROOT
 
 ENV PATH="$APP_ROOT/image/bin:$PATH" \
     CA_PATH=/ca
 
-COPY glide.* ./
-RUN glide i
+RUN mkdir -pv "$CA_PATH"
 
-RUN ln -sfvr . "$APP_ROOT" \
- && mkdir -pv "$CA_PATH"
+COPY go.mod go.sum ./
+COPY vendor vendor
 
 COPY utils utils
 COPY servers servers

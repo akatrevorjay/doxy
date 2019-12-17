@@ -1,5 +1,3 @@
 #!/bin/bash
 
-glide i || echo "Failed to install latest glide deps" >&2
-
 exec rerun "${GOPACKAGE:?}" "$@"
