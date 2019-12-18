@@ -9,7 +9,7 @@ services:
     restart: always
 
     volumes:
-      - .:/go/src/github.com/akatrevorjay/doxy
+      - .:/app
       - /var/run/docker.sock:/run/docker.sock
       - ./ca:/ca
 

@@ -4,9 +4,10 @@ RUN apt-get update -qq \
  && apt-get install -qqy git traceroute \
  && apt-get clean
 
-RUN go get -u -v github.com/akatrevorjay/rerun
+RUN go get -u -v github.com/codeskyblue/fswatch
 
-ENV APP_ROOT=/app
+ENV GOPACKAGE=github.com/akatrevorjay/doxy \
+    APP_ROOT=/app
 
 WORKDIR $APP_ROOT
 
